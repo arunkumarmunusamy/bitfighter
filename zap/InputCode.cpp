@@ -318,10 +318,12 @@ bool InputCodeManager::getState(InputCode inputCode)
 static const InputCode modifiers[] = { KEY_CTRL, KEY_ALT, KEY_SHIFT, KEY_META, KEY_SUPER };
 static const char InputStringJoiner = '+';
 
-// At any given time, for any combination of keys being pressed, there will be an official "input string" that looks a bit like [Ctrl+T] or whatever.  
+// At any given time, for any combination of keys being pressed, there will be an official "input string" that looks a bit 
+// like [Ctrl+T] or whatever.  
 // This may be different than the keys actually being pressed.  For example, if the A and B keys are down, the inputString will be [A].
 // In the event that two keys are both down, we'll prefer the one passed in inputCode, if possible.
 // This generally works well most of the time, but may need to be cleaned up if it generates erroneous or misleading input strings.
+// Modifiers will appear in order specified above... i.e. Ctrl+Shift+A, not Shift+Ctrl+A
 string InputCodeManager::getCurrentInputString(InputCode inputCode)
 {
    InputCode baseKey = KEY_NONE;
@@ -466,7 +468,7 @@ string InputCodeManager::normalizeInputString(const string &inputString)
 }
 
 
-// A valid input string will consist of one or modifiers, seperated by "+", followed by a valid inputCode.
+// A valid input string will consist of one or modifiers, separated by "+", followed by a valid inputCode.
 // Modifier order and case are significant!!  Use normalizeInputString to get case and modifiers fixed up.
 bool InputCodeManager::isValidInputString(const string &inputString)
 {
@@ -2073,7 +2075,11 @@ void InputCodeManager::initializeKeyNames()
    keyNames[S32(KEY_QUOTE)]           = "'";                
    keyNames[S32(KEY_COMMA)]           = ",";                
    keyNames[S32(KEY_PERIOD)]          = ".";                
-   keyNames[S32(KEY_SLASH)]           = "/";       // last keyboardchar              
+   keyNames[S32(KEY_SLASH)]           = "/";       // last keyboardchar   
+
+   keyNames[S32(KEY_EXCLAIM)]         = "!";
+   keyNames[S32(KEY_HASH)]            = "#";
+
    keyNames[S32(KEY_PAGEUP)]          = "Page Up";          
    keyNames[S32(KEY_PAGEDOWN)]        = "Page Down";        
    keyNames[S32(KEY_END)]             = "End";              

@@ -86,7 +86,8 @@ static const char *gameCredits[] = {
 static bool quitting = false;
 
 // Constructor
-CreditsUserInterface::CreditsUserInterface(ClientGame *game) : Parent(game)
+CreditsUserInterface::CreditsUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mScroller = new CreditsScroller();
 }
@@ -124,19 +125,19 @@ void CreditsUserInterface::idle(U32 timeDelta)
 
    if(mScroller->isActive())
       mScroller->updateFX(timeDelta);
-}
-
-
-void CreditsUserInterface::render()
-{
-   if(mScroller->isActive())
-      mScroller->render();
 
    if(quitting)
    {
       quitting = false;
       quit();
    }
+}
+
+
+void CreditsUserInterface::render() const
+{
+   if(mScroller->isActive())
+      mScroller->render();
 }
 
 
@@ -234,7 +235,7 @@ void CreditsScroller::updateFX(U32 delta)
 }
 
 
-void CreditsScroller::render()
+void CreditsScroller::render() const
 {
    glColor(Colors::white);
 
@@ -281,7 +282,8 @@ bool CreditsScroller::isActive() const
 ////////////////////////////////////////
 
 // Constructor
-SplashUserInterface::SplashUserInterface(ClientGame *game) : Parent(game)
+SplashUserInterface::SplashUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mPhase = SplashPhaseNone;
 }
@@ -319,7 +321,7 @@ void SplashUserInterface::idle(U32 timeDelta)
 }
 
 
-void SplashUserInterface::render()
+void SplashUserInterface::render() const
 {
    if(mPhase == SplashPhaseAnimation)             // Main animation phase
    {

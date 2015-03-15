@@ -20,16 +20,19 @@
 namespace Zap
 {
 
-MessageUserInterface::MessageUserInterface(ClientGame *game) : Parent(game)
+MessageUserInterface::MessageUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    // Do nothing
 }
+
 
 // Destructor
 MessageUserInterface::~MessageUserInterface()
 {
    // Do nothing
 }
+
 
 void MessageUserInterface::onActivate()
 {
@@ -119,7 +122,7 @@ void MessageUserInterface::idle(U32 timeDelta)
 }
 
 
-void MessageUserInterface::render()
+void MessageUserInterface::render() const
 {
    const F32 canvasWidth  = (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth();
    const F32 canvasHeight = (F32)DisplayManager::getScreenInfo()->getGameCanvasHeight();

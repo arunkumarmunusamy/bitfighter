@@ -8,12 +8,14 @@
 #include "config.h"           // For FolderManager
 #include "gameType.h"
 #include "GameSettings.h"
+#include "Level.h"
 
-#include "md5wrapper.h"
+#include "Md5Utils.h"
 #include "stringUtils.h"
 
 #include "tnlAssert.h"
 
+#include <sstream>
 
 namespace Zap
 {
@@ -45,6 +47,17 @@ LevelInfo::LevelInfo(const string &filename, const string &folder)
 }
 
 
+// Constructor
+LevelInfo::LevelInfo(const string &levelName, GameTypeId levelType, S32 minPlayers, S32 maxPlayers, const string &script)
+{
+   mLevelName = levelName;
+   mLevelType = levelType;
+   minRecPlayers = minPlayers;
+   maxRecPlayers = maxPlayers;
+   mScriptFileName = script;
+}
+
+
 // Destructor
 LevelInfo::~LevelInfo()
 {
@@ -54,13 +67,17 @@ LevelInfo::~LevelInfo()
 
 void LevelInfo::initialize()
 {
-   mLevelName = "";
    mLevelType = BitmatchGame;
-   filename = "";
-   folder = "";
    minRecPlayers = 0;
    maxRecPlayers = 0;
    mHosterLevelIndex = -1;
+}
+
+
+void LevelInfo::writeToStream(ostream &stream, const string &hash) const
+{
+   stream << hash          << ",\"" << mLevelName.getString() << "\"," << GameType::getGameTypeName(mLevelType) << "," 
+          << minRecPlayers << ","   << maxRecPlayers          << ","   << mScriptFileName                       << '\n'; 
 }
 
 
@@ -111,80 +128,124 @@ LevelInfo LevelSource::getLevelInfo(S32 index)
 }
 
 
+// Remove any "s in place
+static void stripQuotes(string &str)      // not const; will be modified!
+{
+   str.erase(std::remove(str.begin(), str.end(), '"'), str.end());
+}
+
+
+// Static method
+bool LevelSource::getLevelInfoFromDatabase(const string &hash, LevelInfo &levelInfo)
+{
+   return false;
+}
+
+
 // Parse through the chunk of data passed in and find parameters to populate levelInfo with
 // This is only used on the server to provide quick level information without having to load the level
-// (like with playlists or menus)
-// Warning: Mungs chunk!
-void LevelSource::getLevelInfoFromCodeChunk(char *chunk, S32 size, LevelInfo &levelInfo)
+// (like with playlists or menus).  Static method.
+void LevelSource::getLevelInfoFromCodeChunk(const string &code, LevelInfo &levelInfo)
 {
-   S32 cur = 0;
-   S32 startingCur = 0;
+   istringstream stream(code);
+   string line;
 
-   bool foundGameType   = false;
-   bool foundLevelName  = false;
-   bool foundMinPlayers = false;
-   bool foundMaxPlayers = false;
-   bool foundScriptFileName = false;
+   bool foundGameType   = false, foundLevelName  = false, foundMinPlayers = false, 
+        foundMaxPlayers = false, foundScriptName = false;
 
-   while(cur < size && !(foundGameType && foundLevelName && foundMinPlayers && foundMaxPlayers && foundScriptFileName))
+   static const S32 gameTypeLen      = strlen("GameType");
+   static const S32 levelNameLen     = strlen("LevelName");
+   static const S32 minMaxPlayersLen = strlen("MinPlayers");
+   static const S32 scriptLen        = strlen("Script");
+
+   std::size_t pos;
+
+   // Iterate until we've either exhausted all the lines, or found everything we're looking for
+   while(getline(stream, line) && (
+         !foundGameType || !foundLevelName || !foundMinPlayers || !foundMaxPlayers || !foundScriptName))
    {
-      if(chunk[cur] < 32)
+      // Check for GameType
+      if(!foundGameType)
       {
-         if(cur - startingCur > 5)
+         pos = line.find("GameType");
+         if(pos != string::npos)
          {
-            char c = chunk[cur];
-            chunk[cur] = 0;
-            Vector<string> list = parseString(&chunk[startingCur]);
-            chunk[cur] = c;
+            string gameTypeName = line.substr(0, pos + gameTypeLen); 
 
-            if(list.size() >= 1 && list[0].find("GameType") != string::npos)
-            {
-               // validateGameType() will return a valid GameType string -- either what's passed in, or the default if something bogus was specified
-               TNL::Object *theObject = TNL::Object::create(GameType::validateGameType(list[0].c_str()));
+            // ValidateGameType is guaranteed to return a valid GameType name.  Or your money back!!!
+            const string validatedName = GameType::validateGameType(gameTypeName);
 
-               GameType *gt = dynamic_cast<GameType *>(theObject); 
-               if(gt)
-               {
-                  levelInfo.mLevelType = gt->getGameTypeId();
-                  foundGameType = true;
-               }
+            GameTypeId gameTypeId = GameType::getGameTypeIdFromName(validatedName);
+            levelInfo.mLevelType = gameTypeId;
 
-               delete theObject;
-            }
-            else if(list.size() >= 2 && list[0] == "LevelName")
-            {
-               string levelName = list[1];
-
-               // Append additional words to levelName
-               for(S32 i = 2; i < list.size(); i++)   
-                  levelName += " " + list[i];
-
-               levelInfo.mLevelName = levelName;
-
-               foundLevelName = true;
-            }
-            else if(list.size() >= 2 && list[0] == "MinPlayers")
-            {
-               levelInfo.minRecPlayers = atoi(list[1].c_str());
-               foundMinPlayers = true;
-            }
-            else if(list.size() >= 2 && list[0] == "MaxPlayers")
-            {
-               levelInfo.maxRecPlayers = atoi(list[1].c_str());
-               foundMaxPlayers = true;
-            }
-            else if(list.size() >= 2 && list[0] == "Script")
-            {
-               levelInfo.mScriptFileName = list[1];
-               foundScriptFileName = true;
-            }
+            foundGameType = true;
+            continue;
          }
-         startingCur = cur + 1;
       }
-      cur++;
-   }
 
-   levelInfo.ensureLevelInfoHasValidName();
+      // Check for LevelName
+      if(!foundLevelName)
+      {
+         if(line.substr(0, levelNameLen) == "LevelName")
+         {
+            pos = line.find_first_not_of(" ", levelNameLen + 1);
+            if(pos != string::npos)
+            {
+               string levelName = line.substr(pos);
+               stripQuotes(levelName);
+               levelInfo.mLevelName = trim(levelName);
+            }
+
+            foundLevelName = true;
+            continue;
+         }
+      }
+
+      // Check for MinPlayers
+      if(!foundMinPlayers)
+      {
+         if(line.substr(0, minMaxPlayersLen) == "MinPlayers")
+         {
+            pos = line.find_first_not_of(" ", minMaxPlayersLen + 1);
+            if(pos != string::npos)
+               levelInfo.minRecPlayers = atoi(line.substr(pos).c_str());
+
+            foundMinPlayers = true;
+            continue;
+         }
+      }
+
+      // Check for MaxPlayers
+      if(!foundMaxPlayers)
+      {
+         if(line.substr(0, minMaxPlayersLen) == "MaxPlayers")
+         {
+            pos = line.find_first_not_of(" ", minMaxPlayersLen + 1);
+            if(pos != string::npos)
+               levelInfo.maxRecPlayers = atoi(line.substr(pos).c_str());
+
+            foundMaxPlayers = true;
+            continue;
+         }
+      }
+
+      // Check for Script
+      if(!foundScriptName)
+      {
+         if(line.substr(0, scriptLen) == "Script")
+         {
+            pos = line.find_first_not_of(" ", scriptLen + 1);
+            if(pos != string::npos)
+            {
+               string scriptName = line.substr(pos);
+               stripQuotes(scriptName);
+               levelInfo.mScriptFileName = scriptName;
+            }
+            foundScriptName = true;
+            continue;
+         }
+      }
+   }
 }
 
 
@@ -225,6 +286,8 @@ string LevelSource::getLevelFileName(S32 index)
    else
       return mLevelInfos[index].filename;
 }
+
+
 void LevelSource::setLevelFileName(S32 index, const string &filename)
 {
    mLevelInfos[index].filename = filename;
@@ -264,9 +327,11 @@ Vector<string> LevelSource::findAllLevelFilesInFolder(const string &levelDir)
 }
 
 
-bool LevelSource::populateLevelInfoFromSource(const string &fullFilename, S32 index)
+bool LevelSource::populateLevelInfoFromSourceByIndex(S32 index)
 {
-   return populateLevelInfoFromSource(fullFilename, mLevelInfos[index]);
+   // If findLevelFile fails, it will return "", which populateLevelInfoFromSource will handle properly
+   string filename = FolderManager::findLevelFile(mLevelInfos[index].folder, mLevelInfos[index].filename);
+   return populateLevelInfoFromSource(filename, mLevelInfos[index]);
 }
 
 
@@ -300,9 +365,7 @@ bool MultiLevelSource::loadLevels(FolderManager *folderManager)
 
    for(S32 i = 0; i < mLevelInfos.size(); i++)
    {
-      string filename = folderManager->findLevelFile(mLevelInfos[i].folder, mLevelInfos[i].filename);
-
-      if(Parent::populateLevelInfoFromSource(filename, i))
+      if(Parent::populateLevelInfoFromSourceByIndex(i))
          anyLoaded = true;
       else
       {
@@ -316,27 +379,30 @@ bool MultiLevelSource::loadLevels(FolderManager *folderManager)
 
 
 // Load specified level, put results in gameObjectDatabase.  Return md5 hash of level
-string MultiLevelSource::loadLevel(S32 index, Game *game, GridDatabase *gameObjectDatabase)
+Level *MultiLevelSource::getLevel(S32 index) const
 {
    TNLAssert(index >= 0 && index < mLevelInfos.size(), "Index out of bounds!");
 
-   LevelInfo *levelInfo = &mLevelInfos[index];
+   const LevelInfo *levelInfo = &mLevelInfos[index];
 
    string filename = FolderManager::findLevelFile(levelInfo->folder, levelInfo->filename);
 
    if(filename == "")
    {
       logprintf("Unable to find level file \"%s\".  Skipping...", levelInfo->filename.c_str());
-      return "";
+      return NULL;
    }
 
-   if(game->loadLevelFromFile(filename, gameObjectDatabase))
-      return Game::md5.getHashFromFile(filename);    // TODO: Combine this with the reading of the file we're doing anyway in initLevelFromFile()
-   else
+   Level *level = new Level();      // Deleted by Game
+
+   if(!level->loadLevelFromFile(filename))
    {
       logprintf("Unable to process level file \"%s\".  Skipping...", levelInfo->filename.c_str());
-      return "";
+      delete level;
+      return NULL;
    }
+
+   return level;
 }
 
 
@@ -351,25 +417,118 @@ string MultiLevelSource::getLevelFileDescriptor(S32 index) const
 // Reads 4kb of file and uses what it finds there to populate the levelInfo
 bool MultiLevelSource::populateLevelInfoFromSource(const string &fullFilename, LevelInfo &levelInfo)
 {
-   FILE *f = fopen(fullFilename.c_str(), "rb");
-   if(f)
+   // Check if we got a dud... (FolderManager::findLevelFile() will, for example, return "" if it fails)
+   if(fullFilename.empty())
+      return false;
+
+	FILE *f = fopen(fullFilename.c_str(), "rb");
+	if(!f)
    {
-      char data[1024 * 4];  // 4 kb should be enough to fit all parameters at the beginning of level; we don't need to read everything
-      S32 size = (S32)fread(data, 1, sizeof(data), f);
-      fclose(f);
-
-       getLevelInfoFromCodeChunk(data, size, levelInfo);     // Fills levelInfo with data from file
-
-      levelInfo.ensureLevelInfoHasValidName();
-
-      return true;
-   }
-   else
-   {
-      logprintf(LogConsumer::LogWarning, "Could not load level %s [%s]... Skipping...",
+      logprintf(LogConsumer::LogWarning, "Could not read level file %s [%s]... Skipping...",
                                           levelInfo.filename.c_str(), fullFilename.c_str());
       return false;
    }
+
+   Level level;
+   level.loadLevelFromFile(fullFilename);
+
+// some ideas for getting the area of a level:
+//   if(loadLevel())
+//      {
+//         loaded = true;
+//         logprintf(LogConsumer::ServerFilter, "Done. [%s]", getTimeStamp().c_str());
+//      }
+//      else
+//      {
+//         logprintf(LogConsumer::ServerFilter, "FAILED!");
+//
+//         if(mLevelSource->getLevelCount() > 1)
+//            removeLevel(mCurrentLevelIndex);
+//         else
+//         {
+//            // No more working levels to load...  quit?
+//            logprintf(LogConsumer::LogError, "All the levels I was asked to load are corrupt.  Exiting!");
+//
+//            mShutdownTimer.reset(1); 
+//            mShuttingDown = true;
+//            mShutdownReason = "All the levels I was asked to load are corrupt or missing; "
+//                              "Sorry dude -- hosting mode shutting down.";
+//
+//            // To avoid crashing...
+//            if(!getGameType())
+//            {
+//               GameType *gameType = new GameType();
+//               gameType->addToGame(this, getLevel());
+//            }
+//            mLevel->makeSureTeamCountIsNotZero();
+//
+//            return;
+//         }
+//      }
+//   }
+//
+//   computeWorldObjectExtents();                       // Compute world Extents nice and early
+//
+//   if(!mGameRecorderServer && !mShuttingDown && getSettings()->getSetting<YesNo>(IniKey::GameRecording))
+//      mGameRecorderServer = new GameRecorderServer(this);
+//
+//
+//   ////// This block could easily be moved off somewhere else   
+//   fillVector.clear();
+//   getLevel()->findObjects(TeleporterTypeNumber, fillVector);
+//
+//   Vector<pair<Point, const Vector<Point> *> > teleporterData(fillVector.size());
+//   pair<Point, const Vector<Point> *> teldat;
+//
+//   for(S32 i = 0; i < fillVector.size(); i++)
+//   {
+//      Teleporter *teleporter = static_cast<Teleporter *>(fillVector[i]);
+//
+//      teldat.first  = teleporter->getPos();
+//      teldat.second = teleporter->getDestList();
+//
+//      teleporterData.push_back(teldat);
+//   }
+//
+//   // Get our parameters together
+//   Vector<DatabaseObject *> barrierList;
+//   getLevel()->findObjects((TestFunc)isWallType, barrierList, *getWorldExtents());
+//
+//   Vector<DatabaseObject *> turretList;
+//   getLevel()->findObjects(TurretTypeNumber, turretList, *getWorldExtents());
+//
+//   Vector<DatabaseObject *> forceFieldProjectorList;
+//   getLevel()->findObjects(ForceFieldProjectorTypeNumber, forceFieldProjectorList, *getWorldExtents());
+//
+//   bool triangulate;
+//
+//   // Try and load Bot Zones for this level, set flag if failed
+//   // We need to run buildBotMeshZones in order to set mAllZones properly, which is why I (sort of) disabled the use of hand-built zones in level files
+//#ifdef ZAP_DEDICATED
+//   triangulate = false;
+//#else
+//   triangulate = !isDedicated();
+//#endif
+//
+//   BotNavMeshZone::calcLevelSize(getWorldExtents(), barrierList, teleporterData);
+//
+//   ////////////////////////////
+//
+//
+
+
+
+
+
+   char data[1024 * 4];  // Should be enough to fit all parameters at the beginning of level; we don't need to read everything
+   S32 size = (S32)fread(data, 1, sizeof(data), f);
+   fclose(f);
+
+   getLevelInfoFromCodeChunk(string(data, size), levelInfo);     // Fills levelInfo with data from file
+
+
+   levelInfo.ensureLevelInfoHasValidName();
+   return true;
 }
 
 
@@ -402,8 +561,10 @@ FolderLevelSource::~FolderLevelSource()
 ////////////////////////////////////////
 
 // Constructor -- pass in a list of level names and a file; create LevelInfos for each
-FileListLevelSource::FileListLevelSource(const Vector<string> &levelList, const string &folder)
+FileListLevelSource::FileListLevelSource(const Vector<string> &levelList, const string &folder, GameSettings *settings)
 {
+   mGameSettings = settings;
+
    for(S32 i = 0; i < levelList.size(); i++)
       mLevelInfos.push_back(LevelInfo(levelList[i], folder));
 }
@@ -417,27 +578,30 @@ FileListLevelSource::~FileListLevelSource()
 
 
 // Load specified level, put results in gameObjectDatabase.  Return md5 hash of level.
-string FileListLevelSource::loadLevel(S32 index, Game *game, GridDatabase *gameObjectDatabase)
+Level *FileListLevelSource::getLevel(S32 index) const
 {
    TNLAssert(index >= 0 && index < mLevelInfos.size(), "Index out of bounds!");
 
-   LevelInfo *levelInfo = &mLevelInfos[index];
+   const LevelInfo *levelInfo = &mLevelInfos[index];
 
-   string filename = FolderManager::findLevelFile(GameSettings::getFolderManager()->levelDir, levelInfo->filename);
+   string filename = FolderManager::findLevelFile(GameSettings::getFolderManager()->getLevelDir(), levelInfo->filename);
 
    if(filename == "")
    {
       logprintf("Unable to find level file \"%s\".  Skipping...", levelInfo->filename.c_str());
-      return "";
+      return NULL;
    }
 
-   if(game->loadLevelFromFile(filename, gameObjectDatabase))
-      return Game::md5.getHashFromFile(filename);   
-   else
+   Level *level = new Level();      // Will be deleted by caller
+
+   if(!level->loadLevelFromFile(filename))
    {
       logprintf("Unable to process level file \"%s\".  Skipping...", levelInfo->filename.c_str());
-      return "";
+      delete level;
+      return NULL;
    }
+
+   return level;
 }
 
 
@@ -445,7 +609,10 @@ string FileListLevelSource::loadLevel(S32 index, Game *game, GridDatabase *gameO
 Vector<string> FileListLevelSource::findAllFilesInPlaylist(const string &fileName, const string &levelDir)
 {
    Vector<string> levels;
-   Vector<string> lines = parseString(readFile(fileName));
+   string contents;
+
+   readFile(fileName, contents);
+   Vector<string> lines = parseString(contents);
 
    for(S32 i = 0; i < lines.size(); i++)
    {
@@ -471,13 +638,26 @@ Vector<string> FileListLevelSource::findAllFilesInPlaylist(const string &fileNam
 ////////////////////////////////////////
 ////////////////////////////////////////
 
-// Constructor
+// Constructor -- single level
 StringLevelSource::StringLevelSource(const string &levelCode)
 {
-   mLevelCode = levelCode;
+   mLevelCodes.push_back(levelCode);
 
    LevelInfo levelInfo;
    mLevelInfos.push_back(levelInfo);
+}
+
+
+// Constructor -- mulitlpe levels (only used for testing, at the moment)
+StringLevelSource::StringLevelSource(const Vector<string> &levelCodes)
+{
+   mLevelCodes = levelCodes;
+
+   for(S32 i = 0; i < levelCodes.size(); i++)
+   {
+      LevelInfo levelInfo;
+      mLevelInfos.push_back(levelInfo);
+   }
 }
 
 
@@ -488,28 +668,33 @@ StringLevelSource::~StringLevelSource()
 }
 
 
-bool StringLevelSource::populateLevelInfoFromSource(const string &fullFilename, LevelInfo &levelInfo)
+bool StringLevelSource::populateLevelInfoFromSourceByIndex(S32 levelInfoIndex)
 {
-   char chunk[1024 * 4];
-
-   strncpy(chunk, mLevelCode.c_str(), sizeof(chunk));
-   getLevelInfoFromCodeChunk(chunk, strlen(chunk), levelInfo);
-
+   getLevelInfoFromCodeChunk(mLevelCodes[levelInfoIndex], mLevelInfos[levelInfoIndex]);
    return true;
 }
 
 
-string StringLevelSource::loadLevel(S32 index, Game *game, GridDatabase *gameObjectDatabase)
+bool StringLevelSource::populateLevelInfoFromSource(const string &fullFilename, LevelInfo &levelInfo)
 {
-   game->loadLevelFromString(mLevelCode, gameObjectDatabase, "");
-   return Game::md5.getHashFromString(mLevelCode); 
+   TNLAssert(false, "This is never called!");
+   return true;
+}
+
+
+Level *StringLevelSource::getLevel(S32 index) const
+{
+   Level *level = new Level();
+
+   level->loadLevelFromString(mLevelCodes[index], "");
+   return level; 
 }
 
 
 // Returns a textual level descriptor good for logging and error messages and such
 string StringLevelSource::getLevelFileDescriptor(S32 index) const
 {
-   return "string input (" + itos((U32) mLevelCode.length()) + " chars)";
+   return "string input (" + itos((U32) mLevelCodes[index].length()) + " chars)";
 }
 
 

@@ -19,12 +19,12 @@ private:
    bool mActive;
    S32 mCurPage;
 public:
-   explicit DiagnosticUserInterface(ClientGame *game);     // Constructor
+   explicit DiagnosticUserInterface(ClientGame *game, UIManager *uiManager);     // Constructor
    virtual ~DiagnosticUserInterface();
 
    void onActivate();
    void idle(U32 t);
-   void render();
+   void render() const;
    void quit();
    bool onKeyDown(InputCode inputCode);
    bool isActive() const;

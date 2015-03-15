@@ -10,19 +10,15 @@
 #  error "RenderUtils.h shouldn't be included in dedicated build"
 #endif
 
-#include "Point.h"
 #include "Color.h"
-#include "FontContextEnum.h"
 #include "DisplayManager.h"
+#include "FontContextEnum.h"
+#include "Point.h"
 
 #include "tnlTypes.h"
 #include "tnlVector.h"
 
-#if defined(TNL_OS_MOBILE) || defined(BF_USE_GLES)
-#  include "SDL_opengles.h"
-#else
-#  include "SDL_opengl.h"
-#endif
+#include "glinc.h"
 
 using namespace TNL;
 
@@ -72,11 +68,12 @@ void drawFancyBox(T xLeft, U yTop, V xRight, W yBottom, X cornerInset, S32 mode)
 void drawHollowFancyBox(S32 xLeft, S32 yTop, S32 xRight, S32 yBottom, S32 cornerInset);
 void drawFilledFancyBox(S32 xLeft, S32 yTop, S32 xRight, S32 yBottom, S32 cornerInset, const Color &fillColor, F32 fillAlpha, const Color &borderColor);
 
-
 void renderUpArrow(const Point &center, S32 size);
 void renderDownArrow(const Point &center, S32 size);
 void renderLeftArrow(const Point &center, S32 size);
 void renderRightArrow(const Point &center, S32 size);
+
+void renderNumberInBox(const Point pos, S32 number, F32 scale);
 
 
 // Draw string at given location (normal and formatted versions)
@@ -125,7 +122,8 @@ void drawStringf_2pt(Point p1, Point p2, F32 size, F32 vert_offset, const char *
 S32 drawCenteredString_fixed(S32 y, S32 size, const char *str);
 S32 drawCenteredString(S32 x, S32 y, S32 size, const char *str);
 S32 drawCenteredString_fixed(S32 x, S32 y, S32 size, const char *str);
-S32 drawCenteredString_fixed(F32 x, F32 y, S32 size, FontContext fontContext, const char *string);
+S32 drawCenteredString_fixed(F32 x, F32 y, S32 size, FontContext fontContext, const char *str);
+F32 drawCenteredString_fixed(F32 x, F32 y, S32 size, const char *str);
 
 F32 drawCenteredString(F32 x, F32 y, S32 size, const char *str);
 F32 drawCenteredString(F32 x, F32 y, F32 size, const char *str);
@@ -193,6 +191,8 @@ void drawTime(S32 x, S32 y, S32 size, S32 timeInMs, const char *prefixString = "
 S32 getStringWidth(FontContext context, S32 size, const char *string);
 F32 getStringWidth(FontContext context, F32 size, const char *string);
 
+S32 getStringWidth(S32 size, const string &str);
+
 F32 getStringWidth(F32 size, const char *str);
 S32 getStringWidth(S32 size, const char *str);
 
@@ -202,7 +202,7 @@ S32 getStringWidthf(S32 size, const char *format, ...);
 S32 getStringPairWidth(S32 size, FontContext leftContext, FontContext rightContext, const char* leftStr, const char* rightStr);
 
 void wrapString(const string &str, S32 wrapWidth, S32 fontSize, FontContext context, Vector<string> &lines);
-Vector<string> wrapString(const string &str, S32 width, S32 fontSize, const string indentPrefix = "");
+//Vector<string> wrapString(const string &str, S32 width, S32 fontSize, const string indentPrefix = "");
 
 
 U32 drawWrapText(const string &msg, S32 xpos, S32 ypos, S32 width, S32 ypos_end,

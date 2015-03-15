@@ -77,6 +77,8 @@ namespace Zap
    { "rename",             &ChatCommands::renamePlayerHandler,       { NAME, STR },  2, ADMIN_COMMANDS,  0,  1,  {"<from>","<to>"},       "Give a player a new name" },
    { "maxbots",            &ChatCommands::setMaxBotsHandler,         { xINT },       1, ADMIN_COMMANDS,  0,  1,  {"<count>"},             "Set the maximum bots allowed for this server" },
    { "shuffle",            &ChatCommands::shuffleTeams,              { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "Randomly reshuffle teams" },
+   { "lockteams",          &ChatCommands::lockTeams,                 { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "Lock teams - teams same every game, players may not change" },
+   { "unlockteams",        &ChatCommands::unlockTeams,               { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "Unlock teams - Teams revert to normal behavior" },
 #ifdef TNL_DEBUG
    { "pause",              &ChatCommands::pauseHandler,              { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "TODO: add 'PAUSED' display while paused" },
 #endif
@@ -104,7 +106,7 @@ namespace Zap
 };
 
 
-const S32 ChatHelper::chatCmdSize = ARRAYSIZE(chatCmds); // So instructions will now how big chatCmds is
+const S32 ChatHelper::chatCmdSize = ARRAYSIZE(chatCmds); // So instructions will know how big chatCmds is
 static const S32 CHAT_COMPOSE_FONT_SIZE = 12;
 
 static void makeCommandCandidateList();      // Forward delcaration
@@ -136,13 +138,14 @@ void ChatHelper::activate(ChatType chatType)
 }
 
 
-bool ChatHelper::isCmdChat()
+// Returns true if the chat message being composed looks like a command
+bool ChatHelper::isCmdChat() const
 {
    return mLineEditor.at(0) == '/' || mCurrentChatType == CmdChat;
 }
 
 
-void ChatHelper::render()
+void ChatHelper::render() const
 {
    FontManager::pushFontContext(InputContext);
    const char *promptStr;
@@ -199,7 +202,7 @@ void ChatHelper::render()
    // Only need to set scissors if we're scrolling.  When not scrolling, we control the display by only showing
    // the specified number of lines; there are normally no partial lines that need vertical clipping as 
    // there are when we're scrolling.  Note also that we only clip vertically, and can ignore the horizontal.
-   scissorsManager.enable(isAnimating, getGame()->getSettings()->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode"), 
+   scissorsManager.enable(isAnimating, getGame()->getSettings()->getSetting<DisplayMode>(IniKey::WindowMode), 
                           0.0f, F32(realYPos - 3), F32(DisplayManager::getScreenInfo()->getGameCanvasWidth()), F32(BOX_HEIGHT));
 
    // Render text entry box like thingy

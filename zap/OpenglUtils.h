@@ -3,23 +3,13 @@
 // See LICENSE.txt for full copyright information
 //------------------------------------------------------------------------------
 
-/*
- *  Most of this was taken directly from freeglut sources
- */
-
 #ifndef OPENGLUTILS_H_
 #define OPENGLUTILS_H_
 
 #include "tnlTypes.h"
 #include "FontContextEnum.h"
 
-#if defined(TNL_OS_MOBILE) || defined(BF_USE_GLES)
-#  include "SDL_opengles.h"
-   // Needed for GLES compatibility
-#  define glOrtho glOrthof
-#else
-#  include "SDL_opengl.h"
-#endif
+#include "glinc.h"
 
 
 namespace TNL {
@@ -47,8 +37,13 @@ extern void renderLine(const Vector<Point> *points);
 
 extern void setFont(FontId fontId);
 
+extern void glScale(const Point &scaleFactor);
 extern void glScale(F32 scaleFactor);
+extern void glScale(F32 xScaleFactor, F32 yScaleFactor);
 extern void glTranslate(const Point &pos);
+extern void glTranslate(F32 x, F32 y);
+extern void glRotate(F32 angle);
+
 extern void setDefaultBlendFunction();
 
 template<class T, class U, class V>

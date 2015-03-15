@@ -19,6 +19,7 @@
 #include "DisplayManager.h"
 #include "OpenglUtils.h"
 #include "Cursor.h"
+#include "Level.h"
 
 #include "version.h"
 
@@ -45,7 +46,7 @@ static S32 QSORT_CALLBACK alphaNumberSort(string *a, string *b)
 
 static void idleObjects(ClientGame *game, U32 timeDelta)
 {
-   const Vector<DatabaseObject *> *gameObjects = game->getGameObjDatabase()->findObjects_fast();
+   const Vector<DatabaseObject *> *gameObjects = game->getLevel()->findObjects_fast();
 
    // Visit each game object, handling moves and running its idle method
    for(S32 i = gameObjects->size() - 1; i >= 0; i--)
@@ -69,7 +70,7 @@ static void idleObjects(ClientGame *game, U32 timeDelta)
 
 static void resetRenderState(ClientGame *game)
 {
-   const Vector<DatabaseObject *> *gameObjects = game->getGameObjDatabase()->findObjects_fast();
+   const Vector<DatabaseObject *> *gameObjects = game->getLevel()->findObjects_fast();
 
    for(S32 i = gameObjects->size() - 1; i >= 0; i--)
    {
@@ -296,7 +297,8 @@ static void processPlaybackSelectionCallback(ClientGame *game, U32 index)
 }
 
 
-PlaybackSelectUserInterface::PlaybackSelectUserInterface(ClientGame *game) : LevelMenuSelectUserInterface(game)
+PlaybackSelectUserInterface::PlaybackSelectUserInterface(ClientGame *game, UIManager *uiManager) : 
+   LevelMenuSelectUserInterface(game, uiManager)
 {
    // Do nothing
 }
@@ -307,7 +309,7 @@ void PlaybackSelectUserInterface::onActivate()
 //mLevels
    mMenuTitle = "Choose Recorded Game";
 
-   const string &dir = getGame()->getSettings()->getFolderManager()->recordDir;
+   const string &dir = getGame()->getSettings()->getFolderManager()->getRecordDir();
 
    S32 oldIndex = selectedIndex;
 
@@ -342,7 +344,7 @@ void PlaybackSelectUserInterface::onActivate()
 
 void PlaybackSelectUserInterface::processSelection(U32 index)
 {
-   string file = joindir(getGame()->getSettings()->getFolderManager()->recordDir, mLevels[index]);
+   string file = joindir(getGame()->getSettings()->getFolderManager()->getRecordDir(), mLevels[index]);
    GameRecorderPlayback *gc = new GameRecorderPlayback(getGame(), file.c_str());
    if(!gc->isValid())
    {
@@ -369,7 +371,8 @@ static void processPlaybackDownloadCallback(ClientGame *game, U32 index)
 }
 
 
-PlaybackServerDownloadUserInterface::PlaybackServerDownloadUserInterface(ClientGame *game) : LevelMenuSelectUserInterface(game)
+PlaybackServerDownloadUserInterface::PlaybackServerDownloadUserInterface(ClientGame *game, UIManager *uiManager) : 
+   LevelMenuSelectUserInterface(game, uiManager)
 {
    // Do nothing
 }
@@ -391,6 +394,7 @@ void PlaybackServerDownloadUserInterface::processSelection(U32 index)
 
    getGame()->getConnectionToServer()->c2sRequestRecordedGameplay(StringPtr(mLevels[index].c_str()));
    MenuItem *item = getMenuItem(index);
+
    if(item)
    {
       string downloadedstring = mLevels[index] + " (downloaded)";
@@ -416,7 +420,8 @@ void PlaybackServerDownloadUserInterface::receivedLevelList(const Vector<string>
 ////////////////////////////////////////
 ////////////////////////////////////////
 
-PlaybackGameUserInterface::PlaybackGameUserInterface(ClientGame *game) : UserInterface(game)
+PlaybackGameUserInterface::PlaybackGameUserInterface(ClientGame *game, UIManager *uiManager) : 
+   UserInterface(game, uiManager)
 {
    mGameInterface = game->getUIManager()->getUI<GameUserInterface>();
    mSpeed = 0;
@@ -591,7 +596,7 @@ void PlaybackGameUserInterface::idle(U32 timeDelta)
 }
 
 
-void PlaybackGameUserInterface::render()
+void PlaybackGameUserInterface::render() const
 {
    mGameInterface->render();
 

@@ -27,7 +27,8 @@ namespace Zap
 using namespace std;
 
 // Constructor
-TextEntryUserInterface::TextEntryUserInterface(ClientGame *game) : Parent(game)  
+TextEntryUserInterface::TextEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER TEXT:";
    instr1 = "";
@@ -57,7 +58,7 @@ static const F32 fontSizeBig = 30.0f;
 static const S32 TextEntryYPos = 325;
 
 
-F32 TextEntryUserInterface::getFontSize()
+F32 TextEntryUserInterface::getFontSize() const
 {
    F32 maxLineLength = 750.0f;      // Pixels
 
@@ -70,7 +71,7 @@ F32 TextEntryUserInterface::getFontSize()
 }
 
 
-void TextEntryUserInterface::render()
+void TextEntryUserInterface::render() const
 {
    glColor(Colors::white);
 
@@ -151,7 +152,8 @@ void TextEntryUserInterface::setString(string str)
 ////////////////////////////////////////
 
 // Constructor
-LevelNameEntryUserInterface::LevelNameEntryUserInterface(ClientGame *game) : Parent(game)     
+LevelNameEntryUserInterface::LevelNameEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER LEVEL TO EDIT:";
    instr1 = "Enter an existing level, or create your own!";
@@ -184,7 +186,7 @@ void LevelNameEntryUserInterface::onActivate()
    Parent::onActivate();
    mLevelIndex = 0;
 
-   mLevels = getGame()->getSettings()->getLevelList();
+   mLevels = mGameSettings->getLevelList();
 
    // Remove the extension from the level file
    for(S32 i = 0; i < mLevels.size(); i++)
@@ -293,15 +295,14 @@ void LevelNameEntryUserInterface::onAccept(const char *name)
    getUIManager()->activate(ui, false);
    
    // Get that baby into the INI file
-   getGame()->getSettings()->getIniSettings()->lastEditorName = name;
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());             
+   mGameSettings->setSetting(IniKey::LastEditorName, string(name));
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
    // Should be...
    //getGame()->getIniSettings()->saveSettingsToDisk();
 }
 
-extern void drawHorizLine(S32,S32,S32);
 
-void LevelNameEntryUserInterface::render()
+void LevelNameEntryUserInterface::render() const
 {
    static const S32 linesBefore = 6;
    static const S32 linesAfter = 3;
@@ -327,7 +328,8 @@ void LevelNameEntryUserInterface::render()
 ////////////////////////////////////////
 
 // Constructor
-PasswordEntryUserInterface::PasswordEntryUserInterface(ClientGame *game) : Parent(game)
+PasswordEntryUserInterface::PasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    setSecret(true);
 }
@@ -340,7 +342,7 @@ PasswordEntryUserInterface::~PasswordEntryUserInterface()
 }
 
 
-void PasswordEntryUserInterface::render()
+void PasswordEntryUserInterface::render() const
 {
    const S32 canvasWidth = DisplayManager::getScreenInfo()->getGameCanvasWidth();
    const S32 canvasHeight = DisplayManager::getScreenInfo()->getGameCanvasHeight();
@@ -368,9 +370,10 @@ void PasswordEntryUserInterface::render()
 ////////////////////////////////////////
 
 // Constructor
-ServerAccessPasswordEntryUserInterface::ServerAccessPasswordEntryUserInterface(ClientGame *game) : Parent(game)
+ServerAccessPasswordEntryUserInterface::ServerAccessPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
-   /* Do nothing */
+   // Do nothing
 }
 
 
@@ -402,12 +405,14 @@ void ServerAccessPasswordEntryUserInterface::setAddressToConnectTo(const Address
 ////////////////////////////////////////
 
 // Constructor
-ServerPasswordEntryUserInterface::ServerPasswordEntryUserInterface(ClientGame *game) : Parent(game)     
+ServerPasswordEntryUserInterface::ServerPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER SERVER PASSWORD:";
    instr1 = "";
    instr2 = "Enter the password required for access to the server";
 }
+
 
 // Destructor
 ServerPasswordEntryUserInterface::~ServerPasswordEntryUserInterface()
@@ -421,7 +426,8 @@ ServerPasswordEntryUserInterface::~ServerPasswordEntryUserInterface()
 
 
 // Constructor
-LevelChangeOrAdminPasswordEntryUserInterface::LevelChangeOrAdminPasswordEntryUserInterface(ClientGame *game) : Parent(game)     
+LevelChangeOrAdminPasswordEntryUserInterface::LevelChangeOrAdminPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER PASSWORD:";
    instr1 = "";

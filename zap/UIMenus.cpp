@@ -17,6 +17,7 @@
 #include "UINameEntry.h"
 #include "UIManager.h"
 
+#include "Level.h"
 #include "LevelSource.h"
 #include "LevelDatabase.h"
 
@@ -62,13 +63,15 @@ extern void shutdownBitfighter();
 ////////////////////////////////////
 
 // Constructor
-MenuUserInterface::MenuUserInterface(ClientGame *game) : UserInterface(game)
+MenuUserInterface::MenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   UserInterface(game, uiManager)
 {
    initialize();
 }
 
 
-MenuUserInterface::MenuUserInterface(ClientGame *game, const string &title) : UserInterface(game)
+MenuUserInterface::MenuUserInterface(ClientGame *game, UIManager *uiManager, const string &title) : 
+   UserInterface(game, uiManager)
 {
    initialize();
 
@@ -98,7 +101,8 @@ void MenuUserInterface::initialize()
    mAssociatedObject = NULL;
 
    // Max number of menu items we show on screen before we go into scrolling mode -- won't work with mixed size menus
-   mMaxMenuSize = S32((DisplayManager::getScreenInfo()->getGameCanvasHeight() - 150) / (getTextSize(MENU_ITEM_SIZE_NORMAL) + getGap(MENU_ITEM_SIZE_NORMAL)));
+   mMaxMenuSize = S32((DisplayManager::getScreenInfo()->getGameCanvasHeight() - 150) / 
+                      (getTextSize(MENU_ITEM_SIZE_NORMAL) + getGap(MENU_ITEM_SIZE_NORMAL)));
 }
 
 
@@ -149,19 +153,19 @@ void MenuUserInterface::addWrappedMenuItem(boost::shared_ptr<MenuItem> menuItem)
 }
 
 
-S32 MenuUserInterface::getMenuItemCount()
+S32 MenuUserInterface::getMenuItemCount() const
 {
    return mMenuItems.size();
 }
 
 
-MenuItem *MenuUserInterface::getLastMenuItem()
+MenuItem *MenuUserInterface::getLastMenuItem() const
 {
    return mMenuItems.last().get();
 }
 
 
-MenuItem *MenuUserInterface::getMenuItem(S32 index)
+MenuItem *MenuUserInterface::getMenuItem(S32 index) const
 {
    return mMenuItems[index].get();
 }
@@ -180,38 +184,40 @@ void MenuUserInterface::idle(U32 timeDelta)
    // (i.e. we don't want to limit scrolling action only to times when user moves mouse)
    if(itemSelectedWithMouse)
       processMouse();
+
+   mFirstVisibleItem = findFirstVisibleItem();
 }
 
 
-// Return index offset to account for scrolling menus; basically caluclates index of topmost visible item
-S32 MenuUserInterface::getOffset()
+// Return index offset to account for scrolling menus; basically caluclates index of top-most visible item
+S32 MenuUserInterface::findFirstVisibleItem() const
 {
    S32 offset = 0;
 
    if(isScrollingMenu())     // Do some sort of scrolling
    {
-      // itemSelectedWithMouse basically lets users highlight the top and bottom items in a scrolling list,
+      // itemSelectedWithMouse lets users highlight the top or bottom item in a scrolling list,
       // which can't be done when using the keyboard
       if(selectedIndex - mFirstVisibleItem < (itemSelectedWithMouse ? 0 : 1))
          offset = selectedIndex - (itemSelectedWithMouse ? 0 : 1);
+
       else if( selectedIndex - mFirstVisibleItem > (mMaxMenuSize - (itemSelectedWithMouse ? 1 : 2)) )
          offset = selectedIndex - (mMaxMenuSize - (itemSelectedWithMouse ? 1 : 2));
+
       else offset = mFirstVisibleItem;
    }
 
-   mFirstVisibleItem = checkMenuIndexBounds(offset);
-
-   return mFirstVisibleItem;
+   return checkMenuIndexBounds(offset);
 }
 
 
-bool MenuUserInterface::isScrollingMenu()
+bool MenuUserInterface::isScrollingMenu() const
 {
    return mMenuItems.size() > mMaxMenuSize;
 }
 
 
-S32 MenuUserInterface::checkMenuIndexBounds(S32 index)
+S32 MenuUserInterface::checkMenuIndexBounds(S32 index) const
 {
    if(index < 0)
       return 0;
@@ -308,7 +314,7 @@ static void renderArrowBelow(S32 pos)
 
 
 // Basic menu rendering
-void MenuUserInterface::render()
+void MenuUserInterface::render() const
 {
    FontManager::pushFontContext(MenuContext);
 
@@ -335,7 +341,7 @@ void MenuUserInterface::render()
 
    // Instructions
    if(mRenderInstructions)
-      renderMenuInstructions(getGame()->getSettings());
+      renderMenuInstructions(mGameSettings);
 
    FontManager::popFontContext();
 
@@ -345,7 +351,7 @@ void MenuUserInterface::render()
       count = mMaxMenuSize;
 
    S32 yStart = getYStart();
-   S32 offset = getOffset();
+   S32 offset = mFirstVisibleItem;
 
    S32 shrinkfact = 1;
 
@@ -431,7 +437,7 @@ void MenuUserInterface::render()
 
 
 // Calculates maximum index that the first item can have -- on non scrolling menus, this will be 0
-S32 MenuUserInterface::getMaxFirstItemIndex()
+S32 MenuUserInterface::getMaxFirstItemIndex() const
 {
    return max(mMenuItems.size() - mMaxMenuSize, 0);
 }
@@ -641,7 +647,7 @@ bool MenuUserInterface::processMenuSpecificKeys(InputCode inputCode)
 }
 
 
-S32 MenuUserInterface::getTotalMenuItemHeight()
+S32 MenuUserInterface::getTotalMenuItemHeight() const
 {
    S32 height = 0;
    for(S32 i = 0; i < mMenuItems.size(); i++)
@@ -808,7 +814,8 @@ bool MenuUserInterfaceWithIntroductoryAnimation::mFirstTime = true;
 
 
 // Constructor
-MenuUserInterfaceWithIntroductoryAnimation::MenuUserInterfaceWithIntroductoryAnimation(ClientGame *game) : Parent(game)
+MenuUserInterfaceWithIntroductoryAnimation::MenuUserInterfaceWithIntroductoryAnimation(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mShowingAnimation = false;
 }
@@ -842,7 +849,7 @@ void MenuUserInterfaceWithIntroductoryAnimation::idle(U32 timeDelta)
 }
 
 
-void MenuUserInterfaceWithIntroductoryAnimation::render()
+void MenuUserInterfaceWithIntroductoryAnimation::render() const
 {
    Parent::render();
 
@@ -910,7 +917,12 @@ static void highScoresSelectedCallback(ClientGame *game, U32 unused)
 
 static void editorSelectedCallback(ClientGame *game, U32 unused)
 {
-   game->setLevelDatabaseId(LevelDatabase::NOT_IN_DATABASE);      // <=== Should not be here... perhaps in editor onActivate?
+   // The editor needs to have a GameType to initialize.  In order to have a GameType, we need to have a Level (which holds our
+   // GameType object now).  Normally, levels come from the server, but in the case of the editor, we need to create one.  We
+   // can do that here (ugly as it may be) so that it will be ready by the time we get to the activate call below.
+   // This really feels like the wrong place for this to happen, but it has to happen before the activate, or we get a crash.
+   //game->setLevel(new Level());
+   //game->setLevelDatabaseId(LevelDatabase::NOT_IN_DATABASE);      // <=== Should not be here... perhaps in editor onActivate?
    game->getUIManager()->getUI<EditorUserInterface>()->setLevelFileName("");      // Reset this so we get the level entry screen
    game->getUIManager()->activate<EditorUserInterface>();
 }
@@ -931,17 +943,20 @@ static void quitSelectedCallback(ClientGame *game, U32 unused)
 //////////
 
 // Constructor
-MainMenuUserInterface::MainMenuUserInterface(ClientGame *game) : Parent(game)
+MainMenuUserInterface::MainMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "";
-   mMOTD[0] = 0;
+   mMotd = "";
    mMenuSubTitle = "";
+   mMotdPos = S32_MIN;
+
    mRenderInstructions = false;
 
    mNeedToUpgrade = false;           // Assume we're up-to-date until we hear from the master
    mShowedUpgradeAlert = false;      // So we don't show the upgrade message more than once
 
-   InputCode keyHelp = getInputCode(game->getSettings(), BINDING_HELP);
+   InputCode keyHelp = getInputCode(mGameSettings, BINDING_HELP);
 
    addMenuItem(new MenuItem("JOIN LAN/INTERNET GAME", joinSelectedCallback,       "", KEY_J));
    addMenuItem(new MenuItem("HOST GAME",              hostSelectedCallback,       "", KEY_H));
@@ -972,11 +987,9 @@ void MainMenuUserInterface::onActivate()
 
 
 // Set the MOTD we received from the master
-void MainMenuUserInterface::setMOTD(const char *motd)
+void MainMenuUserInterface::setMOTD(const string &motd)
 {
-   strncpy(mMOTD, motd, MOTD_LEN);     
-
-   motdArriveTime = getGame()->getCurrentTime();    // Used for scrolling the message
+   mMotd = motd;
 }
 
 
@@ -990,25 +1003,20 @@ void MainMenuUserInterface::setNeedToUpgrade(bool needToUpgrade)
 }
 
 
-void MainMenuUserInterface::render()
+static const S32 MotdFontSize = 20;
+
+void MainMenuUserInterface::render() const
 {
    S32 canvasWidth = DisplayManager::getScreenInfo()->getGameCanvasWidth();
 
-   static const S32 MOTD_VERT_POS = 540;
+   static const S32 MotdVertPos = 540;
 
    // Draw our Message-Of-The-Day, if we have one
-   if(strcmp(mMOTD, "") != 0)
+   if(!mMotd.empty())
    {
-      // Draw message, scrolling
-      U32 width = getStringWidth(20, mMOTD);
-      U32 totalWidth = width + canvasWidth;
-      U32 pixelsPerSec = 100;
-      U32 delta = getGame()->getCurrentTime() - motdArriveTime;
-      delta = U32(delta * pixelsPerSec * 0.001) % totalWidth;
-
       FontManager::pushFontContext(MotdContext);
       glColor(Colors::white);
-      drawString(canvasWidth - delta, MOTD_VERT_POS, 20, mMOTD);
+      drawString(mMotdPos, MotdVertPos, MotdFontSize, mMotd.c_str());
       FontManager::popFontContext();
    }
 
@@ -1031,6 +1039,19 @@ void MainMenuUserInterface::idle(U32 timeDelta)
    {
       mColorTimer2.reset(ColorTime2);
       mTransDir2 = !mTransDir2;
+   }
+
+
+   // Update MOTD scroller
+   static const U32 PixelsPerSec = 100;
+   S32 width = getStringWidth(MotdFontSize, mMotd);
+
+   if(!mMotd.empty())
+   {
+      if(mMotdPos < -1 * width)
+         mMotdPos = DisplayManager::getScreenInfo()->getGameCanvasWidth();
+      else
+         mMotdPos -= (S32)(timeDelta * PixelsPerSec * 0.001);
    }
 }
 
@@ -1060,14 +1081,15 @@ void MainMenuUserInterface::showUpgradeAlert()
    ErrorMessageUserInterface *ui = getUIManager()->getUI<ErrorMessageUserInterface>();
 
    ui->reset();
-   ui->setTitle("OUTDATED VERSION");
-   ui->setMessage("You are running an older version of Bitfighter.  You will only be able to "
-                  "play with players who still have the same outdated version.\n\n"
+   ui->setTitle("UPDATED VERSION AVAILABLE");
+   ui->setMessage("There is now an updated version of Bitfighter available.  You will only "
+                  "be able to play with people who still have the same version you have.\n\n"
                   "To get the latest, visit bitfighter.org");
+   ui->setInstr("Press [[Esc]] to play");
 
    getUIManager()->activate(ui);
 
-   mShowedUpgradeAlert = true;            // Only show this alert once per session -- we don't need to beat them over the head with it!
+   mShowedUpgradeAlert = true;   // Only show this alert once per session -- we don't need to beat them over the head with it!
 }
 
 
@@ -1081,7 +1103,8 @@ void MainMenuUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-OptionsMenuUserInterface::OptionsMenuUserInterface(ClientGame *game) : Parent(game)
+OptionsMenuUserInterface::OptionsMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "OPTIONS MENU";
 }
@@ -1128,9 +1151,10 @@ static void setFullscreenCallback(ClientGame *game, U32 mode)
    GameSettings *settings = game->getSettings();
 
    // Save existing setting
-   settings->getIniSettings()->oldDisplayMode = game->getSettings()->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode");     
+   settings->getIniSettings()->oldDisplayMode = 
+            game->getSettings()->getSetting<DisplayMode>(IniKey::WindowMode);
 
-   settings->getIniSettings()->mSettings.setVal("WindowMode", (DisplayMode)mode);
+   settings->setSetting(IniKey::WindowMode, (DisplayMode)mode);
    VideoSystem::actualizeScreenMode(game->getSettings(), false, game->getUIManager()->getCurrentUI()->usesEditorScreenMode());
 }
 
@@ -1156,8 +1180,6 @@ void OptionsMenuUserInterface::setupMenus()
    clearMenuItems();
    Vector<string> opts;
 
-   GameSettings *settings = getGame()->getSettings();
-
    addMenuItem(new MenuItem(getMenuItemCount(), "INPUT", inputCallback, 
                         "Joystick settings, Remap keys", KEY_I));
 
@@ -1167,12 +1189,12 @@ void OptionsMenuUserInterface::setupMenus()
    addMenuItem(new MenuItem(getMenuItemCount(), "IN-GAME HELP", inGameHelpSelectedCallback, 
                         "Change settings related to in-game tutorial/help", KEY_H));
 
-   addMenuItem(new YesNoMenuItem("AUTOLOGIN:", !settings->shouldShowNameEntryScreenOnStartup(), 
+   addMenuItem(new YesNoMenuItem("AUTOLOGIN:", !mGameSettings->shouldShowNameEntryScreenOnStartup(),
                                  "If selected, you will automatically log in "
                                  "on start, bypassing the first screen", KEY_A));
 
 #ifndef TNL_OS_MOBILE
-   addMenuItem(getWindowModeMenuItem((U32)settings->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode")));
+   addMenuItem(getWindowModeMenuItem((U32)mGameSettings->getSetting<DisplayMode>(IniKey::WindowMode)));
 #endif
 
 #ifdef INCLUDE_CONN_SPEED_ITEM
@@ -1183,7 +1205,7 @@ void OptionsMenuUserInterface::setupMenus()
    opts.push_back("HIGH");
    opts.push_back("VERY HIGH");
 
-   addMenuItem(new ToggleMenuItem("CONNECTION SPEED:", opts, settings->getIniSettings()->connectionSpeed + 2, true, 
+   addMenuItem(new ToggleMenuItem("CONNECTION SPEED:", opts, mGameSettings->getSetting<S32>(IniKey::ConnectionSpeed) + 2, true,
                                   setConnectionSpeedCallback, "Speed of your connection, if your ping goes too high, try slower speed.",  KEY_E));
 #endif
 }
@@ -1197,13 +1219,11 @@ static bool isFullScreen(DisplayMode displayMode)
 
 void OptionsMenuUserInterface::toggleDisplayMode()
 {
-   GameSettings *settings = getGame()->getSettings();
-
-   DisplayMode oldMode = settings->getIniSettings()->oldDisplayMode;
+   DisplayMode oldMode = mGameSettings->getIniSettings()->oldDisplayMode;
 
    // Save current setting
-   DisplayMode curMode = settings->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode");
-   settings->getIniSettings()->oldDisplayMode = curMode;
+   DisplayMode curMode = mGameSettings->getSetting<DisplayMode>(IniKey::WindowMode);
+   mGameSettings->getIniSettings()->oldDisplayMode = curMode;
 
    DisplayMode mode;
 
@@ -1228,8 +1248,8 @@ void OptionsMenuUserInterface::toggleDisplayMode()
       mode = (nextmode == DISPLAY_MODE_UNKNOWN) ? (DisplayMode) 0 : nextmode; // Bounds check
    }
 
-   settings->getIniSettings()->mSettings.setVal("WindowMode", mode);
-   VideoSystem::actualizeScreenMode(settings, false, editorScreenMode);
+   mGameSettings->setSetting(IniKey::WindowMode, mode);
+   VideoSystem::actualizeScreenMode(mGameSettings, false, editorScreenMode);
 }
 
 
@@ -1238,9 +1258,9 @@ void OptionsMenuUserInterface::onEscape()
 {
    bool autologin = getMenuItem(3)->getIntValue();
 
-   getGame()->getSettings()->setAutologin(autologin);
+   mGameSettings->setAutologin(autologin);
 
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
    getUIManager()->reactivatePrevUI();      //mGameUserInterface
 }
 
@@ -1250,7 +1270,8 @@ void OptionsMenuUserInterface::onEscape()
 
 
 // Constructor
-InputOptionsMenuUserInterface::InputOptionsMenuUserInterface(ClientGame *game) : Parent(game)
+InputOptionsMenuUserInterface::InputOptionsMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "INPUT OPTIONS";
 }
@@ -1270,7 +1291,7 @@ void InputOptionsMenuUserInterface::onActivate()
 }
 
 
-void InputOptionsMenuUserInterface::render()
+void InputOptionsMenuUserInterface::render() const
 {
    Parent::render();
 
@@ -1301,7 +1322,7 @@ void InputOptionsMenuUserInterface::render()
 // Callbacks for InputOptions menu
 static void setControlsCallback(ClientGame *game, U32 val)
 {
-   game->getSettings()->getIniSettings()->mSettings.setVal("ControlMode", RelAbs(val));
+   game->getSettings()->setSetting(IniKey::ControlMode, RelAbs(val));
 }
 
 
@@ -1313,7 +1334,8 @@ static void defineKeysCallback(ClientGame *game, U32 unused)
 
 static void setControllerCallback(ClientGame *game, U32 joystickIndex)
 {
-   game->getSettings()->getIniSettings()->mSettings.setVal("JoystickType", Joystick::JoystickPresetList[joystickIndex].identifier);
+   game->getSettings()->setSetting(IniKey::JoystickType, 
+                                                           Joystick::JoystickPresetList[joystickIndex].identifier);
    Joystick::setSelectedPresetIndex(joystickIndex);
 }
 
@@ -1387,14 +1409,12 @@ void InputOptionsMenuUserInterface::setupMenus()
    
    Vector<string> opts;
 
-   GameSettings *settings = getGame()->getSettings();
-
-   Joystick::initJoystick(settings);            // Refresh joystick list
-   Joystick::enableJoystick(settings, true);    // Refresh joystick list
+   Joystick::initJoystick(mGameSettings);            // Refresh joystick list
+   Joystick::enableJoystick(mGameSettings, true);    // Refresh joystick list
 
    addStickOptions(&opts);
 
-   U32 inputMode = (U32)settings->getInputMode();   // 0 = keyboard, 1 = joystick
+   U32 inputMode = (U32)mGameSettings->getInputMode();   // 0 = keyboard, 1 = joystick
    if(inputMode == InputModeJoystick)
       inputMode += GameSettings::UseJoystickNumber;
 
@@ -1421,11 +1441,11 @@ void InputOptionsMenuUserInterface::setupMenus()
                             "Remap keyboard or joystick controls", KEY_D, KEY_K));
 
    opts.clear();
-   opts.push_back(ucase(toString(Relative)));
-   opts.push_back(ucase(toString(Absolute)));
+   opts.push_back(ucase(Evaluator::toString(Relative)));
+   opts.push_back(ucase(Evaluator::toString(Absolute)));
    TNLAssert(Relative < Absolute, "Items added in wrong order!");
 
-   RelAbs mode = settings->getIniSettings()->mSettings.getVal<RelAbs>("ControlMode");
+   RelAbs mode = mGameSettings->getSetting<RelAbs>(IniKey::ControlMode);
 
    addMenuItem(new ToggleMenuItem("CONTROLS:", opts, (U32)mode, true, 
                                   setControlsCallback, "Set controls to absolute (normal) or relative (like a tank) mode", KEY_C));
@@ -1435,7 +1455,7 @@ void InputOptionsMenuUserInterface::setupMenus()
 // Save options to INI file, and return to our regularly scheduled program
 void InputOptionsMenuUserInterface::onEscape()
 {
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
    getUIManager()->reactivatePrevUI();      
 }
 
@@ -1444,7 +1464,8 @@ void InputOptionsMenuUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-SoundOptionsMenuUserInterface::SoundOptionsMenuUserInterface(ClientGame *game) : Parent(game)
+SoundOptionsMenuUserInterface::SoundOptionsMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "SOUND OPTIONS";
 }
@@ -1481,18 +1502,18 @@ static string getVolMsg(F32 volume)
 // Callbacks for SoundOptions menu
 static void setSFXVolumeCallback(ClientGame *game, U32 vol)
 {
-   game->getSettings()->getIniSettings()->sfxVolLevel = F32(vol) / 10;
+   game->getSettings()->setSetting(IniKey::EffectsVolume, F32(vol) * 0.1f);
 }
 
 static void setMusicVolumeCallback(ClientGame *game, U32 vol)
 {
-   game->getSettings()->getIniSettings()->setMusicVolLevel(F32(vol) / 10);
+   game->getSettings()->setSetting(IniKey::MusicVolume, F32(vol) * 0.1f);
 }
 
 static void setVoiceVolumeCallback(ClientGame *game, U32 vol)
 {
-   F32 oldVol = game->getSettings()->getIniSettings()->voiceChatVolLevel;
-   game->getSettings()->getIniSettings()->voiceChatVolLevel = F32(vol) / 10;
+   F32 oldVol = game->getSettings()->getSetting<F32>(IniKey::VoiceChatVolume);
+   game->getSettings()->setSetting(IniKey::VoiceChatVolume, F32(vol) * 0.1f);
    if((oldVol == 0) != (vol == 0) && game->getConnectionToServer())
       game->getConnectionToServer()->s2rVoiceChatEnable(vol != 0);
 }
@@ -1500,7 +1521,7 @@ static void setVoiceVolumeCallback(ClientGame *game, U32 vol)
 
 static void setVoiceEchoCallback(ClientGame *game, U32 val)
 {
-   game->getSettings()->getIniSettings()->mSettings.setVal("VoiceEcho", YesNo(val));
+   game->getSettings()->setSetting(IniKey::VoiceEcho, YesNo(val));
 }
 
 
@@ -1509,34 +1530,32 @@ void SoundOptionsMenuUserInterface::setupMenus()
    clearMenuItems();
    Vector<string> opts;
 
-   GameSettings *settings = getGame()->getSettings();
-
    for(S32 i = 0; i <= 10; i++)
       opts.push_back(getVolMsg( F32(i) / 10 ));
 
-   addMenuItem(new ToggleMenuItem("SFX VOLUME:",        opts, U32((settings->getIniSettings()->sfxVolLevel + 0.05) * 10.0), false, 
+   addMenuItem(new ToggleMenuItem("SFX VOLUME:",        opts, U32((mGameSettings->getSetting<F32>(IniKey::EffectsVolume) + 0.05) * 10.0), false,
                                   setSFXVolumeCallback,   "Set sound effects volume", KEY_S));
 
-   if(settings->getSpecified(NO_MUSIC))
+   if(mGameSettings->isCmdLineParamSpecified(NO_MUSIC))
          addMenuItem(new MessageMenuItem("MUSIC MUTED FROM COMMAND LINE", Colors::red));
    else
-      addMenuItem(new ToggleMenuItem("MUSIC VOLUME:",      opts, U32((settings->getIniSettings()->getMusicVolLevel() + 0.05) * 10.0), false,
+      addMenuItem(new ToggleMenuItem("MUSIC VOLUME:",      opts, U32((mGameSettings->getMusicVolume() + 0.05) * 10.0), false,
                                      setMusicVolumeCallback, "Set music volume", KEY_M));
 
-   addMenuItem(new ToggleMenuItem("VOICE CHAT VOLUME:", opts, U32((settings->getIniSettings()->voiceChatVolLevel + 0.05) * 10.0), false, 
+   addMenuItem(new ToggleMenuItem("VOICE CHAT VOLUME:", opts, U32((mGameSettings->getSetting<F32>(IniKey::VoiceChatVolume) + 0.05) * 10.0), false,
                                   setVoiceVolumeCallback, "Set voice chat volume", KEY_V));
    opts.clear();
    opts.push_back("DISABLED");      // No == 0
    opts.push_back("ENABLED");       // Yes == 1
-   addMenuItem(new ToggleMenuItem("VOICE ECHO:", opts, (U32)settings->getIniSettings()->mSettings.getVal<YesNo>("VoiceEcho"), true, 
-                                  setVoiceEchoCallback, "Toggle whether you hear your voice on voice chat",  KEY_E));
+   addMenuItem(new ToggleMenuItem("VOICE ECHO:", opts, (U32)mGameSettings->getSetting<YesNo>(IniKey::VoiceEcho),
+                                  true, setVoiceEchoCallback, "Toggle whether you hear your voice on voice chat",  KEY_E));
 }
 
 
 // Save options to INI file, and return to our regularly scheduled program
 void SoundOptionsMenuUserInterface::onEscape()
 {
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
    getUIManager()->reactivatePrevUI();      //mGameUserInterface
 }
 
@@ -1545,7 +1564,8 @@ void SoundOptionsMenuUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-InGameHelpOptionsUserInterface::InGameHelpOptionsUserInterface(ClientGame *game) : Parent(game)
+InGameHelpOptionsUserInterface::InGameHelpOptionsUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "IN-GAME HELP OPTIONS";
 }
@@ -1577,9 +1597,7 @@ void InGameHelpOptionsUserInterface::setupMenus()
 {
    clearMenuItems();
 
-   GameSettings *settings = getGame()->getSettings();
-
-   bool showingInGameHelp = settings->getShowingInGameHelp();
+   bool showingInGameHelp = mGameSettings->getShowingInGameHelp();
    addMenuItem(new YesNoMenuItem("SHOW IN-GAME HELP:", showingInGameHelp, "Show help/tutorial messages in game", KEY_H));
 
    addMenuItem(new MenuItem(getMenuItemCount(), "RESET HELP MESSAGES", resetMessagesCallback, 
@@ -1594,8 +1612,8 @@ void InGameHelpOptionsUserInterface::onEscape()
 
    getGame()->setShowingInGameHelp(show);
    
-   getGame()->getSettings()->setShowingInGameHelp(show);
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());
+   mGameSettings->setShowingInGameHelp(show);
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
 
    getUIManager()->reactivatePrevUI();      //mGameUserInterface
 }
@@ -1605,7 +1623,8 @@ void InGameHelpOptionsUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-RobotOptionsMenuUserInterface::RobotOptionsMenuUserInterface(ClientGame *game) : Parent(game)
+RobotOptionsMenuUserInterface::RobotOptionsMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "ROBOT OPTIONS";
 }
@@ -1629,14 +1648,14 @@ void RobotOptionsMenuUserInterface::setupMenus()
 {
    clearMenuItems();
 
-   IniSettings *iniSettings = getGame()->getSettings()->getIniSettings();
+   IniSettings *iniSettings = mGameSettings->getIniSettings();
 
-   addMenuItem(new YesNoMenuItem("PLAY WITH BOTS:", iniSettings->playWithBots,
-         "Add robots to balance the teams?",  KEY_B, KEY_P));
+   addMenuItem(new YesNoMenuItem("PLAY WITH BOTS:", iniSettings->mSettings.getVal<YesNo>(IniKey::AddRobots),
+               "Add robots to balance the teams?",  KEY_B, KEY_P));
 
     // This doesn't have a callback so we'll handle it in onEscape - make sure to set the correct index!
-   addMenuItem(new CounterMenuItem("MINIMUM PLAYERS:", iniSettings->minBalancedPlayers,
-         1, 2, 32, "bots", "", "Bots will be added until total player count meets this value", KEY_M));
+   addMenuItem(new CounterMenuItem("MINIMUM PLAYERS:", iniSettings->mSettings.getVal<S32>(IniKey::MinBalancedPlayers),
+                                   1, 2, 32, "bots", "", "Bots will be added until total player count meets this value", KEY_M));
 }
 
 
@@ -1651,10 +1670,10 @@ void RobotOptionsMenuUserInterface::onEscape()
 void RobotOptionsMenuUserInterface::saveSettings()
 {
    // Save our minimum players, get the correct index of the appropriate menu item
-   getGame()->getSettings()->getIniSettings()->playWithBots = getMenuItem(0)->getIntValue() == 1;
-   getGame()->getSettings()->getIniSettings()->minBalancedPlayers = getMenuItem(1)->getIntValue();
+   mGameSettings->setSetting(IniKey::AddRobots,          YesNo(getMenuItem(0)->getIntValue() == 1));
+   mGameSettings->setSetting(IniKey::MinBalancedPlayers, getMenuItem(1)->getIntValue());
 
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
 }
 
 
@@ -1662,7 +1681,8 @@ void RobotOptionsMenuUserInterface::saveSettings()
 ////////////////////////////////////////
 
 // Constructor
-ServerPasswordsMenuUserInterface::ServerPasswordsMenuUserInterface(ClientGame *game) : Parent(game)
+ServerPasswordsMenuUserInterface::ServerPasswordsMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "SERVER PASSWORDS";
 }
@@ -1690,22 +1710,20 @@ void ServerPasswordsMenuUserInterface::setupMenus()
 {
    clearMenuItems();
 
-   GameSettings *settings = getGame()->getSettings();
-
    LevelChangePwItemIndex =
-   addMenuItem(new TextEntryMenuItem("LEVEL CHANGE PASSWORD:", settings->getLevelChangePassword(), 
+   addMenuItem(new TextEntryMenuItem("LEVEL CHANGE PASSWORD:", mGameSettings->getLevelChangePassword(),
                                      "<Anyone can change levels>", 
                                      "Grants access to change the levels, and set duration and winning score", 
                                      MAX_PASSWORD_LENGTH, KEY_L));
 
    AdminPwItemIndex =
-   addMenuItem(new TextEntryMenuItem("ADMIN PASSWORD:", settings->getAdminPassword(),       
+   addMenuItem(new TextEntryMenuItem("ADMIN PASSWORD:", mGameSettings->getAdminPassword(),
                                      "<No remote admin access>", 
                                      "Allows you to kick/ban players, change their teams, and set most server parameters", 
                                      MAX_PASSWORD_LENGTH, KEY_A));
 
    ConnectionPwItemIndex =
-   addMenuItem(new TextEntryMenuItem("CONNECTION PASSWORD:", settings->getServerPassword(), 
+   addMenuItem(new TextEntryMenuItem("CONNECTION PASSWORD:", mGameSettings->getServerPassword(),
                                      "<Anyone can connect>", 
                                      "If the Connection password is set, players need to know it to join the server", 
                                      MAX_PASSWORD_LENGTH, KEY_C));
@@ -1723,13 +1741,12 @@ void ServerPasswordsMenuUserInterface::onEscape()
 void ServerPasswordsMenuUserInterface::saveSettings()
 {
    TNLAssert(LevelChangePwItemIndex != -1, "Need to call setupMenus first!");
-   GameSettings *settings = getGame()->getSettings();
 
-   settings->setAdminPassword      (getMenuItem(AdminPwItemIndex)->getValue(),       true);
-   settings->setLevelChangePassword(getMenuItem(LevelChangePwItemIndex)->getValue(), true);
-   settings->setServerPassword     (getMenuItem(ConnectionPwItemIndex)->getValue(),  true);
+   mGameSettings->setAdminPassword      (getMenuItem(AdminPwItemIndex)->getValue(),       true);
+   mGameSettings->setLevelChangePassword(getMenuItem(LevelChangePwItemIndex)->getValue(), true);
+   mGameSettings->setServerPassword     (getMenuItem(ConnectionPwItemIndex)->getValue(),  true);
 
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
 }
 
 
@@ -1737,7 +1754,8 @@ void ServerPasswordsMenuUserInterface::saveSettings()
 ////////////////////////////////////////
 
 // Constructor
-NameEntryUserInterface::NameEntryUserInterface(ClientGame *game) : Parent(game)
+NameEntryUserInterface::NameEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuTitle = "";
    mReason = NetConnection::ReasonNone;
@@ -1801,8 +1819,8 @@ void NameEntryUserInterface::setupMenu()
    mRenderSpecialInstructions = false;
 
    addMenuItem(new MenuItem("PLAY", nameAndPasswordAcceptCallback, ""));
-   addMenuItem(new TextEntryMenuItem("NICKNAME:", getGame()->getSettings()->getIniSettings()->mSettings.getVal<string>("LastName"), 
-                                    getGame()->getSettings()->getDefaultName(), "", MAX_PLAYER_NAME_LENGTH));
+   addMenuItem(new TextEntryMenuItem("NICKNAME:", mGameSettings->getSetting<string>(IniKey::LastName),
+         mGameSettings->getDefaultName(), "", MAX_PLAYER_NAME_LENGTH));
 
    getMenuItem(1)->setFilter(nickNameFilter);  // Quotes are incompatible with PHPBB3 logins, %s are used for var substitution
 
@@ -1810,12 +1828,12 @@ void NameEntryUserInterface::setupMenu()
    //{
       MenuItem *menuItem;
 
-      menuItem = new TextEntryMenuItem("PASSWORD:", getGame()->getSettings()->getPlayerPassword(), "", "", MAX_PLAYER_PASSWORD_LENGTH);
+      menuItem = new TextEntryMenuItem("PASSWORD:", mGameSettings->getPlayerPassword(), "", "", MAX_PLAYER_PASSWORD_LENGTH);
       menuItem->setSecret(true);
       addMenuItem(menuItem);
 
       // If we have already saved a PW, this defaults to yes; to no otherwise
-      menuItem = new YesNoMenuItem("SAVE PASSWORD:", getGame()->getSettings()->getPlayerPassword() != "", "");
+      menuItem = new YesNoMenuItem("SAVE PASSWORD:", mGameSettings->getPlayerPassword() != "", "");
       menuItem->setSize(MENU_ITEM_SIZE_SMALL);
       addMenuItem(menuItem);
    //}
@@ -1869,7 +1887,8 @@ void NameEntryUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-HostMenuUserInterface::HostMenuUserInterface(ClientGame *game) : MenuUserInterface(game)
+HostMenuUserInterface::HostMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   MenuUserInterface(game, uiManager)
 {
    mMenuTitle ="HOST A GAME";
 
@@ -1895,11 +1914,9 @@ static void startHostingCallback(ClientGame *game, U32 unused)
 {
    game->getUIManager()->getUI<HostMenuUserInterface>()->saveSettings();
 
-   GameSettingsPtr settings = game->getSettingsPtr();
+   LevelSourcePtr levelSource = LevelSourcePtr(game->getSettings()->chooseLevelSource(game));
 
-   LevelSourcePtr levelSource = LevelSourcePtr(settings->chooseLevelSource(game));
-
-   initHosting(settings, levelSource, false, false);
+   initHosting(game->getSettingsPtr(), levelSource, false, false);
 }
 
 static void hostOnServerCallback(ClientGame *game, U32 unused)
@@ -1931,33 +1948,35 @@ void HostMenuUserInterface::setupMenus()
 {
    clearMenuItems();
 
-   GameSettings *settings = getGame()->getSettings();
-
    // These menu items MUST align with the MenuItems enum
    addMenuItem(new MenuItem("START HOSTING", startHostingCallback, "", KEY_H));
 
    addMenuItem(new MenuItem(getMenuItemCount(), "ROBOTS", robotOptionsSelectedCallback,
          "Add robots and adjust their settings", KEY_R));
 
-   addMenuItem(new TextEntryMenuItem("SERVER NAME:", settings->getHostName(), 
+   addMenuItem(new TextEntryMenuItem("SERVER NAME:", mGameSettings->getHostName(),
                                      "<Bitfighter Host>", "", MaxServerNameLen,  KEY_N));
 
-   addMenuItem(new TextEntryMenuItem("DESCRIPTION:", settings->getHostDescr(),                    
+   addMenuItem(new TextEntryMenuItem("DESCRIPTION:", mGameSettings->getHostDescr(),
                                      "<Empty>", "", MaxServerDescrLen, KEY_D));
 
    addMenuItem(new MenuItem(getMenuItemCount(), "PASSWORDS", passwordOptionsSelectedCallback,
-         "Set server passwords/permissions", KEY_P));
+                            "Set server passwords/permissions", KEY_P));
 
-   addMenuItem(new YesNoMenuItem("ALLOW MAP DOWNLOADS:", settings->getIniSettings()->allowGetMap, "", KEY_M));
+   addMenuItem(new YesNoMenuItem("ALLOW MAP DOWNLOADS:", 
+         mGameSettings->getSetting<YesNo>(IniKey::AllowGetMap),
+                                 "", KEY_M));
 
-   addMenuItem(new YesNoMenuItem("RECORD GAMES:", settings->getIniSettings()->enableGameRecording, ""));
+   addMenuItem(new YesNoMenuItem("RECORD GAMES:", 
+         mGameSettings->getSetting<YesNo>(IniKey::GameRecording),
+                                 ""));
 
    // Note, Don't move "HOST ON SERVER" above "RECORD GAMES" unless
    // first checking HostMenuUserInterface::saveSettings if it saves correctly
    if(getGame()->getConnectionToMaster() && getGame()->getConnectionToMaster()->isHostOnServerAvailable())
       addMenuItem(new MenuItem("HOST ON SERVER", hostOnServerCallback, "", KEY_H));
 
-   addMenuItem(new MenuItem("PLAYBACK GAMES",    playbackGamesCallback,  ""));
+   addMenuItem(new MenuItem("PLAYBACK GAMES", playbackGamesCallback, ""));
 }
 
 
@@ -1973,19 +1992,17 @@ void HostMenuUserInterface::onEscape()
 // Save parameters and get them into the INI file
 void HostMenuUserInterface::saveSettings()
 {
-   GameSettings *settings = getGame()->getSettings();
+   mGameSettings->setHostName (getMenuItem(OPT_NAME)->getValue(),  true);
+   mGameSettings->setHostDescr(getMenuItem(OPT_DESCR)->getValue(), true);
 
-   settings->setHostName (getMenuItem(OPT_NAME)->getValue(), true);
-   settings->setHostDescr(getMenuItem(OPT_DESCR)->getValue(), true);
+   mGameSettings->setSetting<YesNo>(IniKey::AllowGetMap,   getMenuItem(OPT_GETMAP)->getIntValue() ? Yes : No);
+   mGameSettings->setSetting<YesNo>(IniKey::GameRecording, getMenuItem(OPT_RECORD)->getIntValue() ? Yes : No);
 
-   settings->getIniSettings()->allowGetMap = (getMenuItem(OPT_GETMAP)->getIntValue() != 0);
-   settings->getIniSettings()->enableGameRecording = (getMenuItem(OPT_RECORD)->getIntValue() != 0);
-
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
 }
 
 
-void HostMenuUserInterface::render()
+void HostMenuUserInterface::render() const
 {
    Parent::render();
    getUIManager()->renderLevelListDisplayer();
@@ -1996,7 +2013,8 @@ void HostMenuUserInterface::render()
 ////////////////////////////////////////
 
 // Constructor
-GameMenuUserInterface::GameMenuUserInterface(ClientGame *game) : MenuUserInterface(game)
+GameMenuUserInterface::GameMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   MenuUserInterface(game, uiManager)
 {
    mMenuTitle = "GAME MENU";
 }
@@ -2095,13 +2113,12 @@ static void downloadRecordedGameCallback(ClientGame *game, U32 unused)
 void GameMenuUserInterface::buildMenu()
 {
    clearMenuItems();
-   GameSettings *settings = getGame()->getSettings();
    
    // Save input mode so we can see if we need to display alert if it changes
-   lastInputMode = settings->getInputMode();  
+   lastInputMode = mGameSettings->getInputMode();
 
    addMenuItem(new MenuItem("OPTIONS",      optionsSelectedCallback, "", KEY_O));
-   addMenuItem(new MenuItem("INSTRUCTIONS", helpSelectedCallback,    "", KEY_I, getInputCode(settings, BINDING_HELP)));
+   addMenuItem(new MenuItem("INSTRUCTIONS", helpSelectedCallback,    "", KEY_I, getInputCode(mGameSettings, BINDING_HELP)));
 
 
    GameConnection *gc = (getGame())->getConnectionToServer();
@@ -2166,7 +2183,8 @@ void GameMenuUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-LevelMenuUserInterface::LevelMenuUserInterface(ClientGame *game) : MenuUserInterface(game)
+LevelMenuUserInterface::LevelMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   MenuUserInterface(game, uiManager)
 {
    // Do nothing
 }
@@ -2264,7 +2282,8 @@ void LevelMenuUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-RobotsMenuUserInterface::RobotsMenuUserInterface(ClientGame *game) : MenuUserInterface(game)
+RobotsMenuUserInterface::RobotsMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   MenuUserInterface(game, uiManager)
 {
    // Do nothing
 }
@@ -2344,7 +2363,8 @@ void RobotsMenuUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-LevelMenuSelectUserInterface::LevelMenuSelectUserInterface(ClientGame *game) : Parent(game)
+LevelMenuSelectUserInterface::LevelMenuSelectUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    // When you start typing a name, any character typed within the mStillTypingNameTimer period will be considered
    // to be the next character of the name, rather than a new entry
@@ -2374,8 +2394,8 @@ void LevelMenuSelectUserInterface::processSelection(U32 index)
 
    if((index & UPLOAD_LEVELS_BIT) && (index & (~UPLOAD_LEVELS_BIT)) < U32(mLevels.size()))
    {
-      FolderManager *folderManager = getGame()->getSettings()->getFolderManager();
-      string filename = strictjoindir(folderManager->levelDir, mLevels[index & (~UPLOAD_LEVELS_BIT)]);
+      FolderManager *folderManager = mGameSettings->getFolderManager();
+      string filename = strictjoindir(folderManager->getLevelDir(), mLevels[index & (~UPLOAD_LEVELS_BIT)]);
 
       if(!gc->TransferLevelFile(filename.c_str()))
          getGame()->displayErrorMessage("!!! Can't upload level: unable to read file");
@@ -2412,7 +2432,7 @@ void LevelMenuSelectUserInterface::onActivate()
    if(!strcmp(category.c_str(), UPLOAD_LEVELS))
    {
       // Get all the playable levels in levelDir
-      mLevels = getGame()->getSettings()->getLevelList();     
+      mLevels = mGameSettings->getLevelList();
 
       for(S32 i = 0; i < mLevels.size(); i++)
       {
@@ -2479,10 +2499,10 @@ bool LevelMenuSelectUserInterface::processMenuSpecificKeys(InputCode inputCode)
    itemSelectedWithMouse = false;
 
    // Move the mouse to the new selection to make things "feel better"
-   MenuItemSize size = getMenuItem(getOffset())->getSize();
+   MenuItemSize size = getMenuItem(mFirstVisibleItem)->getSize();
    S32 y = getYStart();
 
-   for(S32 j = getOffset(); j < selectedIndex; j++)
+   for(S32 j = mFirstVisibleItem; j < selectedIndex; j++)
    {
       size = getMenuItem(j)->getSize();
       y += getTextSize(size) + getGap(size);
@@ -2554,10 +2574,12 @@ void LevelMenuSelectUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-PlayerMenuUserInterface::PlayerMenuUserInterface(ClientGame *game) : Parent(game)
+PlayerMenuUserInterface::PlayerMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    // Do nothing
 }
+
 
 // Destructor
 PlayerMenuUserInterface::~PlayerMenuUserInterface()
@@ -2603,8 +2625,8 @@ void PlayerMenuUserInterface::playerSelected(U32 index)
 }
 
 
-// By putting the menu building code in render, menus can be dynamically updated
-void PlayerMenuUserInterface::render()
+// By rebuilding everything every tick, menus can be dynamically updated
+void PlayerMenuUserInterface::idle(U32 timeDelta)
 {
    clearMenuItems();
 
@@ -2624,7 +2646,7 @@ void PlayerMenuUserInterface::render()
 
       PlayerMenuItem *newItem = new PlayerMenuItem(i, clientInfo->getName().getString(), playerSelectedCallback, 
                                                    InputCodeManager::stringToInputCode(c), pt);
-      newItem->setUnselectedColor(*getGame()->getTeamColor(clientInfo->getTeamIndex()));
+      newItem->setUnselectedColor(getGame()->getTeamColor(clientInfo->getTeamIndex()));
 
       addMenuItem(newItem);
    }
@@ -2637,7 +2659,11 @@ void PlayerMenuUserInterface::render()
       mMenuTitle = "CHOOSE WHOSE TEAM TO CHANGE";
    else
       TNLAssert(false, "Unknown action!");
+}
 
+
+void PlayerMenuUserInterface::render() const
+{
    Parent::render();
 }
 
@@ -2652,7 +2678,8 @@ void PlayerMenuUserInterface::onEscape()
 ////////////////////////////////////////
 
 // Constructor
-TeamMenuUserInterface::TeamMenuUserInterface(ClientGame *game) : Parent(game)
+TeamMenuUserInterface::TeamMenuUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mMenuSubTitle = "[Human Players | Bots | Score]";
 }
@@ -2689,8 +2716,8 @@ void TeamMenuUserInterface::processSelection(U32 index)
 }
 
 
-// By reconstructing our menu at render time, changes to teams caused by others will be reflected immediately
-void TeamMenuUserInterface::render()
+// By reconstructing our menu each tick, changes to teams caused by others will be reflected immediately
+void TeamMenuUserInterface::idle(U32 timeDelta)
 {
    clearMenuItems();
 
@@ -2723,8 +2750,6 @@ void TeamMenuUserInterface::render()
 
    // Finally, set menu title
    mMenuTitle = "TEAM TO SWITCH " + name + "TO";       // No space before the TO!
-
-   Parent::render();
 }
 
 
@@ -2732,7 +2757,6 @@ void TeamMenuUserInterface::onEscape()
 {
    getUIManager()->reactivatePrevUI();
 }
-
 
 
 };

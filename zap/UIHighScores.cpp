@@ -28,7 +28,8 @@ namespace Zap
 
 
 // Constructor
-HighScoresUserInterface::HighScoresUserInterface(ClientGame *game) : Parent(game)
+HighScoresUserInterface::HighScoresUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mHaveHighScores = false;
 }
@@ -40,7 +41,7 @@ HighScoresUserInterface::~HighScoresUserInterface()
 }
 
 
-void HighScoresUserInterface::render()
+void HighScoresUserInterface::render() const
 {
    if(mHaveHighScores)
       renderScores();
@@ -49,7 +50,7 @@ void HighScoresUserInterface::render()
 }
 
 
-void HighScoresUserInterface::renderScores()
+void HighScoresUserInterface::renderScores() const
 {
    FontManager::pushFontContext(HelpContext);
 
@@ -121,7 +122,7 @@ void HighScoresUserInterface::renderScores()
 }
 
 
-void HighScoresUserInterface::renderWaitingForScores()
+void HighScoresUserInterface::renderWaitingForScores() const
 {
    MasterServerConnection *masterConn = getGame()->getConnectionToMaster();
 

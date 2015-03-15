@@ -26,15 +26,17 @@ class GameRecorderPlayback : public GameConnection
    S32 mMilliSeconds;
    U32 mSizeToRead;
    SafePtr<ClientInfo> mClientInfoSpectating;
+
 public:
+   GameRecorderPlayback(ClientGame *game, const char *filename);
+   ~GameRecorderPlayback();
+
    StringTableEntry mClientInfoSpectatingName;
    bool mIsButtonHeldDown;
 
    U32 mTotalTime;
    U32 mCurrentTime;
 
-   GameRecorderPlayback(ClientGame *game, const char *filename);
-   ~GameRecorderPlayback();
    bool isValid();
 
    bool lostContact();
@@ -50,7 +52,7 @@ public:
 class PlaybackSelectUserInterface : public LevelMenuSelectUserInterface
 {
 public:
-   explicit PlaybackSelectUserInterface(ClientGame *game);
+   explicit PlaybackSelectUserInterface(ClientGame *game, UIManager *uiManager);
    void onActivate();
    void processSelection(U32 index);
 };
@@ -59,7 +61,7 @@ public:
 class PlaybackServerDownloadUserInterface : public LevelMenuSelectUserInterface
 {
 public:
-   explicit PlaybackServerDownloadUserInterface(ClientGame *game);
+   explicit PlaybackServerDownloadUserInterface(ClientGame *game, UIManager *uiManager);
    void onActivate();
    void processSelection(U32 index);
    void receivedLevelList(const Vector<string> &levels);
@@ -76,7 +78,7 @@ class PlaybackGameUserInterface : public UserInterface
    U32 mSpeedRemainder;
    bool mVisible;
 public:
-   explicit PlaybackGameUserInterface(ClientGame *game);
+   explicit PlaybackGameUserInterface(ClientGame *game, UIManager *uiManager);
    void onActivate();
    void onReactivate();
 
@@ -86,7 +88,7 @@ public:
    void onMouseMoved();
 
    void idle(U32 timeDelta);
-   void render();
+   void render() const;
 };
 
 }

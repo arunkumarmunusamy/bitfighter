@@ -14,7 +14,7 @@
 #include "UIGame.h"              // For obtaining loadout indicator width
 #include "UIManager.h"
 #include "LoadoutIndicator.h"    // For indicator static dimensions
-#include "EnergyGaugeRenderer.h"
+#include "GaugeRenderer.h"
 #include "DisplayManager.h"          // For canvas width
 #include "ScissorsManager.h"
 
@@ -323,12 +323,12 @@ static void renderMessageDoodads(const ClientGame *game, HelpItem helpItem, S32 
    }
    else if(helpItem == EnergyGaugeItem)
    {
-      const S32 indicatorLeft  = UI::EnergyGaugeRenderer::GaugeLeftMargin - indicatorHorizontalGap;
-      const S32 indicatorRight = UI::EnergyGaugeRenderer::GaugeLeftMargin + UI::EnergyGaugeRenderer::GuageWidth + indicatorHorizontalGap;
+      const S32 indicatorLeft  = UI::GaugeRenderer::GaugeLeftMargin - indicatorHorizontalGap;
+      const S32 indicatorRight = UI::GaugeRenderer::GaugeLeftMargin + UI::GaugeRenderer::GaugeWidth + indicatorHorizontalGap;
       const S32 indicatorTop   = DisplayManager::getScreenInfo()->getGameCanvasHeight() - 
                                           (UI::EnergyGaugeRenderer::GaugeBottomMargin + 
                                            UI::EnergyGaugeRenderer::GaugeHeight + 
-                                           UI::EnergyGaugeRenderer::SafetyLineExtend + 
+                                           UI::GaugeRenderer::SafetyLineExtend + 
                                            indicatorVerticalGap);
 
       const S32 textMiddle = (textTop + textBottom) / 2;
@@ -424,8 +424,9 @@ void HelpItemManager::renderMessages(const ClientGame *game, F32 yPos, F32 alpha
       // than normal.  That, combined with scissors clipping, results in the rolling-up effect.
       F32 offset = height * (mHelpFading[i] ? 1 - mHelpTimer[i].getFraction() : 0);
 
-      scissorsManager.enable(mHelpFading[i], game->getSettings()->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode"), 
-                             0, yPos - FontSize, (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth(), height);
+      DisplayMode displayMode = game->getSettings()->getSetting<DisplayMode>(IniKey::WindowMode);
+      scissorsManager.enable(mHelpFading[i], displayMode, 0, yPos - FontSize, 
+                             (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth(), height);
 
       doRenderMessages(game, mInputCodeManager, mHelpItems[i], yPos - offset);
       yPos += height - offset;      
@@ -546,13 +547,13 @@ void HelpItemManager::resetInGameHelpMessages()
 // Write seen status to INI
 void HelpItemManager::saveAlreadySeenList()
 {
-   mGameSettings->getIniSettings()->mSettings.setVal("HelpItemsAlreadySeenList", getAlreadySeenString());
+   mGameSettings->setSetting(IniKey::HelpItemsAlreadySeenList, getAlreadySeenString());
 }
 
 
 void HelpItemManager::loadAlreadySeenList()
 {
-   setAlreadySeenString(mGameSettings->getIniSettings()->mSettings.getVal<string>("HelpItemsAlreadySeenList"));
+   setAlreadySeenString(mGameSettings->getSetting<string>(IniKey::HelpItemsAlreadySeenList));
 }
 
 

@@ -16,7 +16,7 @@
 #include "../zap/LevelDatabase.h"
 
 
-#include "../boost/boost/shared_ptr.hpp"
+#include <boost/shared_ptr.hpp>
 
 using namespace DbWriter;
 
@@ -143,11 +143,12 @@ MasterServerConnection::PHPBB3AuthenticationStatus MasterServerConnection::verif
    //          2 = alphanumeric (only allows alphanumeric characters in the username)
    //
    // We'll use level 1 for now, so users can put special characters in their username
-   authenticator.initialize(mMaster->getSetting<string>("MySqlAddress"), 
-                              mMaster->getSetting<string>("DbUsername"), 
-                              mMaster->getSetting<string>("DbPassword"), 
-                              mMaster->getSetting<string>("Phpbb3Database"), 
-                              mMaster->getSetting<string>("Phpbb3TablePrefix"), 
+   
+   authenticator.initialize(mMaster->getSetting<string>(Master::IniKey::MySqlAddress), 
+                              mMaster->getSetting<string>(Master::IniKey::DbUsername), 
+                              mMaster->getSetting<string>(Master::IniKey::DbPassword), 
+                              mMaster->getSetting<string>(Master::IniKey::Phpbb3Database), 
+                              mMaster->getSetting<string>(Master::IniKey::Phpbb3TablePrefix), 
                               1);
 
    S32 errorcode;
@@ -326,10 +327,14 @@ TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, c2mQueryServers, (U32 queryId
 {
    c2mQueryServersOption(queryId, false);
 }
+
+
 TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, c2mQueryHostServers, (U32 queryId))
 {
    c2mQueryServersOption(queryId, true);
 }
+
+
 void MasterServerConnection::c2mQueryServersOption(U32 queryId, bool hostonly)
 {
    Vector<IPAddress> addresses(IP_MESSAGE_ADDRESS_COUNT);
@@ -504,7 +509,7 @@ static bool listClient(MasterServerConnection *client)
 // This gets updated whenever we gain or lose a server, at most every 5 seconds (currently)
 void MasterServerConnection::writeClientServerList_JSON()
 {
-   string jsonfile = mMaster->getSetting<string>("JsonOutfile");
+   string jsonfile = mMaster->getSetting<string>(IniKey::JsonOutfile);
 
    // Don't write if we don't have a file
    if(jsonfile == "")
@@ -1487,7 +1492,13 @@ void MasterServerConnection::sendMotd()
    // Figure out which MOTD to send to client, based on game version (stored in mVersionString)
    string motdString = mMaster->getSettings()->getMotd(mClientBuild);
 
-   m2cSetMOTD(mMaster->getSetting<string>("ServerName"), motdString.c_str());     // Even level 0 clients can handle this
+   m2cSetMOTD(mMaster->getSetting<string>(IniKey::ServerName), motdString.c_str());     // Even level 0 clients can handle this
+}
+
+
+U32 MasterServerConnection::getClientBuild() const
+{
+   return mClientBuild;
 }
 
 
@@ -1679,6 +1690,7 @@ void MasterServerConnection::writeConnectAccept(BitStream *stream)
       stream->write(mClientId);
 }
 
+
 void MasterServerConnection::onConnectionEstablished()
 {
    Parent::onConnectionEstablished();
@@ -1686,8 +1698,8 @@ void MasterServerConnection::onConnectionEstablished()
    if(mConnectionType == MasterConnectionTypeClient)
    {
       // If client needs to upgrade, tell them
-      m2cSendUpdgradeStatus(mMaster->getSetting<U32>("LatestReleasedCSProtocol")   > mCSProtocolVersion || 
-                            mMaster->getSetting<U32>("LatestReleasedBuildVersion") > mClientBuild);
+      m2cSendUpdgradeStatus(mMaster->getSetting<U32>(IniKey::LatestReleasedCSProtocol)   > mCSProtocolVersion || 
+                            mMaster->getSetting<U32>(IniKey::LatestReleasedBuildVersion) > mClientBuild);
 
       // Send message of the day
       sendMotd();
@@ -1936,12 +1948,16 @@ TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, s2mChangeName, (StringTableEn
       mMaster->writeJsonNow();  // update server name in ".json"
    }
 }
+
+
 TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, s2mServerDescription, (StringTableEntry descr))
 {
    mServerDescr = descr;
 }
 
+
 TNL_IMPLEMENT_NETCONNECTION(MasterServerConnection, NetClassGroupMaster, true);
+
 
 Vector< GameConnectRequest* > MasterServerConnection::gConnectList;
 Vector<SafePtr<MasterServerConnection> > MasterServerConnection::gLeaveChatTimerList;

@@ -78,6 +78,14 @@ class GhostConnection : public EventConnection
 {
    typedef EventConnection Parent;
    friend class ConnectionMessageEvent;
+
+private:
+   bool mClearUnscopedObjects;
+
+   void performScopeQuery();
+   void markAllObjectsAsOutOfScope(bool updateSkipCount);
+   void detatchOutOfScopeObjects();
+
 public:
    /// GhostRef tracks an update sent in one packet for the ghost of one NetObject.
    ///
@@ -95,12 +103,17 @@ public:
                              ///  updated this ghost, or NULL, if no prior packet updated this ghost
    };
 
+
    /// Notify structure attached to each packet with information about the ghost updates in the packet
    struct GhostPacketNotify : public EventConnection::EventPacketNotify
    {
       GhostRef *ghostList; ///< list of ghosts updated in this packet
       GhostPacketNotify() { ghostList = NULL; }
    };
+
+   /// Remove any out-of-scope objects from the client
+   void descopeAndDetachObjects();
+   void removeUnscopedObjects();
 
 protected:
 
@@ -168,6 +181,8 @@ protected:
 
    U32 mGhostClassCount;
    U32 mGhostClassBitSize;
+
+
 public:
    GhostConnection();
    ~GhostConnection();
@@ -196,22 +211,24 @@ public:
 
    };
 
-   void setScopeObject(NetObject *object);                           ///< Sets the object that is queried at each packet to determine
-                                                                     ///  what NetObjects should be ghosted on this connection.
+   void setScopeObject(NetObject *object);            ///< Sets the object that is queried at each packet to determine
+                                                      ///  what NetObjects should be ghosted on this connection.
+   void clearUnscopedObjects();                       /// Call this to trigger the deletion of all unscoped objects on this client
+
    NetObject *getScopeObject() { return (NetObject*)mScopeObject; }; ///< Returns the current scope object.
 
-   void objectInScope(NetObject *object);          ///< Indicate that the specified object is currently in scope.
-                                                   ///
-                                                   ///  Method called by the scope object to indicate that the specified object is in scope.
-   void objectLocalScopeAlways(NetObject *object); ///< The specified object should be always in scope for this connection.
-   void objectLocalClearAlways(NetObject *object); ///< The specified object should not be always in scope for this connection.
+   void objectInScope(NetObject *object);             ///< Indicate that the specified object is currently in scope.
+                                                      ///
+                                                      ///  Method called by the scope object to indicate that the specified object is in scope.
+   void objectLocalScopeAlways(NetObject *object);    ///< The specified object should be always in scope for this connection.
+   void objectLocalClearAlways(NetObject *object);    ///< The specified object should not be always in scope for this connection.
 
-   NetObject *resolveGhost(S32 id);                  ///< Given an object's ghost id, returns the ghost of the object (on the client side).
-   NetObject *resolveGhostParent(S32 id);            ///< Given an object's ghost id, returns the source object (on the server side).
-   void ghostPushNonZero(GhostInfo *gi);             ///< Moves the specified GhostInfo into the range of the ghost array for non-zero updateMasks.
-   void ghostPushToZero(GhostInfo *gi);              ///< Moves the specified GhostInfo into the range of the ghost array for zero updateMasks.
-   void ghostPushZeroToFree(GhostInfo *gi);          ///< Moves the specified GhostInfo into the range of the ghost array for free (unused) GhostInfos.
-   inline void ghostPushFreeToZero(GhostInfo *info); ///< Moves the specified GhostInfo from the free area into the range of the ghost array for zero updateMasks.
+   NetObject *resolveGhost(S32 id);                   ///< Given an object's ghost id, returns the ghost of the object (on the client side).
+   NetObject *resolveGhostParent(S32 id);             ///< Given an object's ghost id, returns the source object (on the server side).
+   void ghostPushNonZero(GhostInfo *gi);              ///< Moves the specified GhostInfo into the range of the ghost array for non-zero updateMasks.
+   void ghostPushToZero(GhostInfo *gi);               ///< Moves the specified GhostInfo into the range of the ghost array for zero updateMasks.
+   void ghostPushZeroToFree(GhostInfo *gi);           ///< Moves the specified GhostInfo into the range of the ghost array for free (unused) GhostInfos.
+   inline void ghostPushFreeToZero(GhostInfo *info);  ///< Moves the specified GhostInfo from the free area into the range of the ghost array for zero updateMasks.
 
    S32 getGhostIndex(NetObject *object); ///< Returns the client-side ghostIndex of the specified server object, or -1 if the object is not available on the client.
 
@@ -222,7 +239,7 @@ public:
    void activateGhosting();                ///< Begins ghosting objects from this GhostConnection to the remote host, starting with the GhostAlways objects.
    bool isGhosting() { return mGhosting; } ///< Returns true if this connection is currently ghosting objects to the remote host.
 
-   void detachObject(GhostInfo *info);                      ///< Notifies the GhostConnection that the specified GhostInfo should no longer be scoped to the client.
+   void detachObject(GhostInfo *info);                ///< Notifies the GhostConnection that the specified GhostInfo should no longer be scoped to the client.
 
    /// RPC from server to client before the GhostAlwaysObjects are transmitted
    TNL_DECLARE_RPC(rpcStartGhosting, (U32 sequence));
@@ -287,6 +304,7 @@ inline void GhostConnection::ghostPushNonZero(GhostInfo *info)
 {
    TNLAssert(info->arrayIndex >= mGhostZeroUpdateIndex && info->arrayIndex < mGhostFreeIndex, "Out of range arrayIndex.");
    TNLAssert(mGhostArray[info->arrayIndex] == info, "Invalid array object.");
+
    if(info->arrayIndex != mGhostZeroUpdateIndex)
    {
       mGhostArray[mGhostZeroUpdateIndex]->arrayIndex = info->arrayIndex;
@@ -294,6 +312,7 @@ inline void GhostConnection::ghostPushNonZero(GhostInfo *info)
       mGhostArray[mGhostZeroUpdateIndex] = info;
       info->arrayIndex = mGhostZeroUpdateIndex;
    }
+
    mGhostZeroUpdateIndex++;
    //TNLAssert(validateGhostArray(), "Invalid ghost array!");
 }
@@ -302,7 +321,9 @@ inline void GhostConnection::ghostPushToZero(GhostInfo *info)
 {
    TNLAssert(info->arrayIndex < mGhostZeroUpdateIndex, "Out of range arrayIndex.");
    TNLAssert(mGhostArray[info->arrayIndex] == info, "Invalid array object.");
+
    mGhostZeroUpdateIndex--;
+
    if(info->arrayIndex != mGhostZeroUpdateIndex)
    {
       mGhostArray[mGhostZeroUpdateIndex]->arrayIndex = info->arrayIndex;
@@ -317,7 +338,9 @@ inline void GhostConnection::ghostPushZeroToFree(GhostInfo *info)
 {
    TNLAssert(info->arrayIndex >= mGhostZeroUpdateIndex && info->arrayIndex < mGhostFreeIndex, "Out of range arrayIndex.");
    TNLAssert(mGhostArray[info->arrayIndex] == info, "Invalid array object.");
+
    mGhostFreeIndex--;
+
    if(info->arrayIndex != mGhostFreeIndex)
    {
       mGhostArray[mGhostFreeIndex]->arrayIndex = info->arrayIndex;
