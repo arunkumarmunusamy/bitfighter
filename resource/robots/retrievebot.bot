@@ -1,0 +1,107 @@
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+--
+-- RetrieveBot, a simple robot that does nothing other than seeks out a flag,
+-- and attempts to return it to a friendly capture zone.  
+--
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- Setup code here: this is run once when the robot is initialized, and
+-- any variables set here will persist throughout the robot's life.  These
+-- variables can be accessed from various functions defined in this file.
+
+-- Global variables
+function main()
+
+   targetType = nil        -- Item we're currently searching for
+   team = nil              -- Will only find items that match this team
+   lastwaypoint = nil
+
+   haveFlag = true         -- Well we don't really, but this will trigger the flag
+                           -- seeking mechanism in the getMove() function to get us
+                           -- started on the right track.  Later, this will be used to
+                           -- track whether we have the flag or not.  If we don't,
+                           -- then our mission is to get the flag.  If we do, then
+                           -- our mission is to return it to one of our capture zones.
+
+
+   game = bf:getGameInfo()  -- Grab the GameInfo object so we can get information about
+                             -- the current game
+
+   print("Level name ==> " .. game:getLevelName())
+end
+
+
+items = { }
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- This is called by the robot's idle routine each tick.  
+-- This function must be present for the robot to work!
+
+function onTick()
+   -- Do we have the flag?
+   if( (not haveFlag) and bot:hasFlag()) then   -- Just got the flag
+
+      targetType = ObjType.GoalZone             -- Set new destination
+      haveFlag = true
+      team = bot:getTeamIndex()
+
+   elseif(haveFlag and not bot:hasFlag()) then  -- Just lost flag
+
+      targetType = ObjType.Flag
+      haveFlag = false
+      team = nil
+
+   end
+
+   table.clear(items)
+   local targets = bf:findAllObjects(items, targetType)
+   local target = findClosest(targets, team)    
+
+   if(target == nil) then                   -- Check for nil
+      return
+   end
+
+   local dest = target:getPos()             -- Set new destination
+   
+--logprint("dest: "..tostring(target))
+   local waypoint = bot:getWaypoint(dest)   -- The getWaypoint function will return a point that
+                                            -- we can fly straight towards that will get us closer
+                                            -- to dest
+   
+   -- If the flag drops off our nav grid, getWaypoint will return nil, 
+   -- and we won't be able to pathfind to it... so just
+   -- continue on the way we were going until we hear otherwise.
+   
+   if waypoint == nil then 
+      waypoint = lastwaypoint 
+   end
+   
+   lastwaypoint = waypoint
+   
+
+   --logprint("Next waypoint: "..tostring(waypoint))                                             
+
+   bot:setAngle(waypoint)       -- Doesn't really matter, but it looks better when we aim
+                                -- the ship towards our target
+
+   -- Note there is a bug in setThrustPt in 012a, so this may not work 
+   bot:setThrust(1, waypoint)   -- Travel towards target at full speed (valid speeds range 
+                                -- from 0 (stopped) to 1 (full bore)
+        
+end
+
+-------------------------------------------------------------------------------
+-- This function is called once and should return the robot's name
+
+function getName()
+    return("RetrieveBot")
+end
+
+

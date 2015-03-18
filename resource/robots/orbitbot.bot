@@ -1,0 +1,81 @@
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+--
+-- OrbitBot, a simple robot that finds the nearest TestItem and orbits it
+-- Note that this relies on line-of-sight navigation, so only good for open levels
+--
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+
+
+-------------------------------------------------------------------------------
+-- Setup; all vars declared here are global unless declared with "local" keyword
+
+function main()
+    orbitAng = 0
+    orbitRadius = 300
+    isInOrbit = false
+    targetItem = nil
+end
+
+
+-------------------------------------------------------------------------------
+-- This function is called once and should return the robot's name
+
+function getName()
+    return( "OrbitBot" )
+end
+
+
+-------------------------------------------------------------------------------
+-- This is called by the robot's idle routine each tick.
+-- This function must be present for the robot to work!
+
+items = { }
+
+function onTick(deltaTime)
+
+    if(targetItem == nil) then
+        table.clear(items)
+        targetItem = findClosest(bf:findAllObjects(items, ObjType.TestItem))
+    end
+
+    if(targetItem == nil) then return end
+
+
+    local botLoc = bot:getPos()
+    local itemLoc = targetItem:getPos()
+
+    local distSq = point.distSquared( botLoc, itemLoc )
+
+    -- Here we use the deltaTime to make the motion look smooth.
+    -- If we just advanced orbitAng by a fixed amount each frame, it would
+    -- appear jerky, as each frame is a slightly different length.
+
+    -- .0015 determined experimentally
+    orbitAng = orbitAng + .0015 * deltaTime
+
+
+    local dest
+
+    if( distSq <= orbitRadius * orbitRadius * 1.1 ) then    -- Close enough to enter orbit
+         dest = point.new( itemLoc.x + orbitRadius * math.cos (orbitAng),
+                           itemLoc.y + orbitRadius * math.sin (orbitAng) )
+
+        if( not isInOrbit ) then
+            orbitAng = point.angleTo( botLoc, dest ) - math.pi / 2
+        end    
+        
+        isInOrbit = true
+                    
+    else                                    -- Travel directly toward object
+        dest = itemLoc
+        orbitAng = point.angleTo( botLoc, dest )
+        isInOrbit = false
+    end
+
+    bot:setThrustToPt( dest )                         -- Travel towards calculated point
+    bot:setAngle( point.angleTo( botLoc, itemLoc ) )  -- Aim ship that way too
+end
