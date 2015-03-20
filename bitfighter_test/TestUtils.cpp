@@ -15,7 +15,6 @@
 #include "DisplayManager.h"
 #include "UIManager.h"
 #include "SystemFunctions.h"
-#include "VideoSystem.h"
 #include "Level.h"
 #include "tnlAssert.h"
 
@@ -114,9 +113,6 @@ void GamePair::initialize(GameSettingsPtr settings, const string &levelCode, S32
 
 void GamePair::initialize(GameSettingsPtr settings, const Vector<string> &levelCode, S32 clientCount)
 {
-   VideoSystem::init();
-   VideoSystem::actualizeScreenMode(settings.get(), false, false);
-   gameManager.initialize();
    // Need to start Lua before we add any clients.  Might as well do it now.
    LuaScriptRunner::startLua(settings->getFolderManager()->getLuaDir());
 
@@ -183,6 +179,8 @@ ClientGame *GamePair::addClient(const string &name, S32 teamIndex)
    client->activateMainMenuUI();
 
    GameManager::addClientGame(client);
+
+   idle(5, 5);
 
    return addClient(client);
 }
