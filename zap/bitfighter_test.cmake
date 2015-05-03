@@ -5,7 +5,9 @@ option(BITFIGHTER_COVERAGE "Add coverage information to the test executable and 
 
 set(TEST_SOURCES
 	${CMAKE_SOURCE_DIR}/bitfighter_test/LevelFilesForTesting.cpp
+	${CMAKE_SOURCE_DIR}/bitfighter_test/TestColor.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestEditor.cpp
+	${CMAKE_SOURCE_DIR}/bitfighter_test/TestGame.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestGameType.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestGameUserInterface.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestGeomUtils.cpp
@@ -15,13 +17,16 @@ set(TEST_SOURCES
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestInputCode.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestIntegration.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestLevelLoader.cpp
+	${CMAKE_SOURCE_DIR}/bitfighter_test/TestLevelSource.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestLevelMenuSelectUserInterface.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestLoadoutIndicator.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestLoadoutTracker.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestLuaEnvironment.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestMaster.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestMove.cpp
+	${CMAKE_SOURCE_DIR}/bitfighter_test/TestObjectCleanup.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestObjects.cpp
+	${CMAKE_SOURCE_DIR}/bitfighter_test/TestObjectScope.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestPolylineGeometry.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestRenderUtils.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestRobot.cpp
@@ -32,6 +37,7 @@ set(TEST_SOURCES
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestSpawnDelay.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestStringUtils.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestSymbolStrings.cpp
+	${CMAKE_SOURCE_DIR}/bitfighter_test/TestTeamChanging.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/TestUtils.cpp
 	${CMAKE_SOURCE_DIR}/bitfighter_test/main_test.cpp
 )

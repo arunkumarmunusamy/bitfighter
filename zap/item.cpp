@@ -6,8 +6,13 @@
 #include "item.h"
 #include "game.h"
 #include "gameConnection.h"
+#include "Level.h"
 
-#include "gameObjectRender.h"
+#ifndef ZAP_DEDICATED
+#  include "RenderUtils.h"
+#  include "GameObjectRender.h"
+#endif
+
 #include "Colors.h"
 #include "stringUtils.h"
 
@@ -45,14 +50,14 @@ bool Item::getCollisionCircle(U32 stateIndex, Point &point, F32 &radius) const
 
 
 // Server only  --> Assumes first two params are x and y location; subclasses may read additional params
-bool Item::processArguments(S32 argc, const char **argv, Game *game)
+bool Item::processArguments(S32 argc, const char **argv, Level *level)
 {
    if(argc < 2)
       return false;
 
    Point pos;
    pos.read(argv);
-   pos *= game->getLegacyGridSize();
+   pos *= level->getLegacyGridSize();
 
    setPos(pos);      // Needed by game
 
@@ -81,7 +86,7 @@ void Item::setItemId(U16 id)
 
 U32 Item::packUpdate(GhostConnection *connection, U32 updateMask, BitStream *stream)
 {
-   //U32 retMask = Parent::packUpdate(connection, updateMask, stream);  // Goes to empty function NetObject::packUpdate
+   U32 retMask = Parent::packUpdate(connection, updateMask, stream);  // Goes to empty function NetObject::packUpdate
 
    if(stream->writeFlag(updateMask & InitialMask))
       stream->writeRangedU32(mItemId, 0, U16_MAX);    // Send id in inital packet
@@ -89,7 +94,7 @@ U32 Item::packUpdate(GhostConnection *connection, U32 updateMask, BitStream *str
    if(stream->writeFlag(updateMask & (InitialMask | GeomMask)))
       ((GameConnection *) connection)->writeCompressedPoint(getPos(), stream);
 
-   return 0; //retMask;
+   return retMask;
 }
 
 
@@ -153,7 +158,7 @@ void Item::setPos(lua_State *L, S32 stackIndex)
 }
 
 
-F32 Item::getRadius()
+F32 Item::getRadius() const
 {
    return mRadius;
 }
@@ -166,33 +171,33 @@ void Item::setRadius(F32 radius)
 
 
 // Provide generic item rendering; will be overridden
-void Item::renderItem(const Point &pos)
+void Item::renderItem(const Point &pos) const
 {
 #ifndef ZAP_DEDICATED
-   drawFilledSquare(pos, 10, &Colors::cyan);
+   RenderUtils::drawFilledSquare(pos, 10, Colors::cyan);
 #endif
 }
 
 
-void Item::render()
+void Item::render() const
 {
    renderItem(getPos());
 }
 
 
-void Item::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices)
+void Item::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices) const
 {
    renderItem(getPos());                    
 }
 
 
-F32 Item::getEditorRadius(F32 currentScale)
+F32 Item::getEditorRadius(F32 currentScale) const
 {
    return (getRadius() + 2) * currentScale;
 }
 
 
-Rect Item::calcExtents()
+Rect Item::calcExtents() const
 {
    return Rect(getPos(), mRadius);
 }

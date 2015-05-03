@@ -19,7 +19,7 @@ struct CreditsInfo
 };
 
 
-class CreditsScroller
+class CreditsScroller: RenderManager
 {
 
 public:
@@ -39,7 +39,7 @@ public:
    CreditsScroller();           // Constructor
    virtual ~CreditsScroller();  // Destructor
    void updateFX(U32 delta);
-   void render();
+   void render() const;
    void resetPosition();
 
    void setActive(bool active);
@@ -58,13 +58,13 @@ private:
    CreditsScroller *mScroller;
 
 public:
-   explicit CreditsUserInterface(ClientGame *game);   // Constructor
-   virtual ~CreditsUserInterface();          // Destructor
+   explicit CreditsUserInterface(ClientGame *game, UIManager *uiManager);  // Constructor
+   virtual ~CreditsUserInterface();                                        // Destructor
 
    void onActivate();
    void onReactivate();
    void idle(U32 timeDelta);
-   void render();
+   void render() const;
    void quit();
    bool onKeyDown(InputCode inputCode);
 };
@@ -90,12 +90,12 @@ private:
    SplashPhase mPhase;            // Phase of the animation
 
 public:
-   explicit SplashUserInterface(ClientGame *game);      // Constructor
+   explicit SplashUserInterface(ClientGame *game, UIManager *uiManager);      // Constructor
    virtual ~SplashUserInterface();
 
    void onActivate();
    void idle(U32 timeDelta);
-   void render();
+   void render() const;
    void quit();
    bool onKeyDown(InputCode inputCode);
 };

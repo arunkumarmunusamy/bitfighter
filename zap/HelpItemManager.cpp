@@ -14,15 +14,14 @@
 #include "UIGame.h"              // For obtaining loadout indicator width
 #include "UIManager.h"
 #include "LoadoutIndicator.h"    // For indicator static dimensions
-#include "EnergyGaugeRenderer.h"
+#include "GaugeRenderer.h"
 #include "DisplayManager.h"          // For canvas width
 #include "ScissorsManager.h"
 
 #include "SymbolShape.h"
 #include "Colors.h"
-#include "OpenglUtils.h"
 #include "RenderUtils.h"
-#include "gameObjectRender.h"    // For drawHorizLine
+#include "GameObjectRender.h"    // For drawHorizLine
 #include "MathUtils.h"           // For min()
 
 
@@ -251,17 +250,17 @@ void HelpItemManager::moveItemFromQueueToActiveList(const ClientGame *game)
 
 static void renderHelpTextBracket(S32 x, S32 top, S32 bot, S32 stubLen)
 {
-   drawVertLine (x, top,         bot);    // Vertical bar
-   drawHorizLine(x, x + stubLen, top);    // Top stub
-   drawHorizLine(x, x + stubLen, bot);    // Bottom stub
+   RenderUtils::drawVertLine (x, top,         bot);    // Vertical bar
+   RenderUtils::drawHorizLine(x, x + stubLen, top);    // Top stub
+   RenderUtils::drawHorizLine(x, x + stubLen, bot);    // Bottom stub
 }
 
 
 static void renderIndicatorBracket(S32 left, S32 right, S32 top, S32 stubLen)
 {
-   drawHorizLine(left,  right, top);   
-   drawVertLine (left,  top,   top + stubLen); 
-   drawVertLine (right, top,   top + stubLen);
+   RenderUtils::drawHorizLine(left,  right, top);
+   RenderUtils::drawVertLine (left,  top,   top + stubLen);
+   RenderUtils::drawVertLine (right, top,   top + stubLen);
 }
 
 
@@ -294,8 +293,8 @@ static void renderMessageDoodads(const ClientGame *game, HelpItem helpItem, S32 
       renderIndicatorBracket(indicatorLeft, indicatorRight, indicatorTop, -stubLen);
 
       // Lines connecting the two
-      drawHorizLine(indicatorMiddle, textLeft,     riserBot);    // Main horizontal
-      drawVertLine (indicatorMiddle, indicatorTop, riserBot);    // Main riser
+      RenderUtils::drawHorizLine(indicatorMiddle, textLeft,     riserBot);    // Main horizontal
+      RenderUtils::drawVertLine (indicatorMiddle, indicatorTop, riserBot);    // Main riser
    }
 
    else if(helpItem == GameTypeAndTimer)
@@ -303,8 +302,10 @@ static void renderMessageDoodads(const ClientGame *game, HelpItem helpItem, S32 
       const Point widthAndHeight = game->getUIManager()->getUI<GameUserInterface>()->getTimeLeftIndicatorWidthAndHeight();
       const S32 w = (S32)widthAndHeight.x;
       const S32 h = (S32)widthAndHeight.y;
-      const S32 x = DisplayManager::getScreenInfo()->getGameCanvasWidth() - UI::TimeLeftRenderer::TimeLeftIndicatorMargin - w;
-      const S32 indicatorTop = DisplayManager::getScreenInfo()->getGameCanvasHeight() - UI::TimeLeftRenderer::TimeLeftIndicatorMargin - h - indicatorVerticalGap;
+      const S32 x = DisplayManager::getScreenInfo()->getGameCanvasWidth() - 
+                                       UI::TimeLeftRenderer::TimeLeftIndicatorMargin - w;
+      const S32 indicatorTop = DisplayManager::getScreenInfo()->getGameCanvasHeight() - 
+                                       UI::TimeLeftRenderer::TimeLeftIndicatorMargin - h - indicatorVerticalGap;
 
       const S32 indicatorLeft  = x + w + indicatorHorizontalGap;
       const S32 indicatorRight = x - indicatorHorizontalGap;
@@ -318,17 +319,17 @@ static void renderMessageDoodads(const ClientGame *game, HelpItem helpItem, S32 
       renderIndicatorBracket(indicatorLeft, indicatorRight, indicatorTop, stubLen);
 
       // Lines connecting the two
-      drawHorizLine(textRight, indicatorMiddle, textMiddle);
-      drawVertLine(indicatorMiddle, textMiddle, indicatorTop);
+      RenderUtils::drawHorizLine(textRight, indicatorMiddle, textMiddle);
+      RenderUtils::drawVertLine(indicatorMiddle, textMiddle, indicatorTop);
    }
    else if(helpItem == EnergyGaugeItem)
    {
-      const S32 indicatorLeft  = UI::EnergyGaugeRenderer::GaugeLeftMargin - indicatorHorizontalGap;
-      const S32 indicatorRight = UI::EnergyGaugeRenderer::GaugeLeftMargin + UI::EnergyGaugeRenderer::GuageWidth + indicatorHorizontalGap;
+      const S32 indicatorLeft  = UI::GaugeRenderer::GaugeLeftMargin - indicatorHorizontalGap;
+      const S32 indicatorRight = UI::GaugeRenderer::GaugeLeftMargin + UI::GaugeRenderer::GaugeWidth + indicatorHorizontalGap;
       const S32 indicatorTop   = DisplayManager::getScreenInfo()->getGameCanvasHeight() - 
                                           (UI::EnergyGaugeRenderer::GaugeBottomMargin + 
                                            UI::EnergyGaugeRenderer::GaugeHeight + 
-                                           UI::EnergyGaugeRenderer::SafetyLineExtend + 
+                                           UI::GaugeRenderer::SafetyLineExtend + 
                                            indicatorVerticalGap);
 
       const S32 textMiddle = (textTop + textBottom) / 2;
@@ -338,8 +339,8 @@ static void renderMessageDoodads(const ClientGame *game, HelpItem helpItem, S32 
       renderIndicatorBracket(indicatorLeft, indicatorRight, indicatorTop, stubLen);
 
       // Lines connecting the two
-      drawHorizLine(textLeft, indicatorMiddle, textMiddle);
-      drawVertLine(indicatorMiddle, textMiddle, indicatorTop);
+      RenderUtils::drawHorizLine(textLeft, indicatorMiddle, textMiddle);
+      RenderUtils::drawVertLine(indicatorMiddle, textMiddle, indicatorTop);
    }
 }
 
@@ -398,7 +399,7 @@ void HelpItemManager::renderMessages(const ClientGame *game, F32 yPos, F32 alpha
    if(mTestingTimer.getCurrent() > 0)
    {
       FontManager::pushFontContext(HelpItemContext);
-      glColor(Colors::red, alpha);
+      RenderUtils::glColor(Colors::red, alpha);
 
       doRenderMessages(game, mInputCodeManager, (HelpItem)(mTestingCtr % HelpItemCount), yPos);
 
@@ -414,7 +415,7 @@ void HelpItemManager::renderMessages(const ClientGame *game, F32 yPos, F32 alpha
 
    for(S32 i = 0; i < mHelpItems.size(); i++)      // Iterate over each message being displayed
    {
-      glColor(Colors::HelpItemRenderColor, alpha);
+      RenderUtils::glColor(Colors::HelpItemRenderColor, alpha);
 
       // Height of the message in pixels, including the gap before the next message (even if there isn't one)
       F32 height = F32(getLinesInHelpItem(i) * (FontSize + FontGap)) + InterMsgGap;
@@ -424,8 +425,9 @@ void HelpItemManager::renderMessages(const ClientGame *game, F32 yPos, F32 alpha
       // than normal.  That, combined with scissors clipping, results in the rolling-up effect.
       F32 offset = height * (mHelpFading[i] ? 1 - mHelpTimer[i].getFraction() : 0);
 
-      scissorsManager.enable(mHelpFading[i], game->getSettings()->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode"), 
-                             0, yPos - FontSize, (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth(), height);
+      DisplayMode displayMode = game->getSettings()->getSetting<DisplayMode>(IniKey::WindowMode);
+      scissorsManager.enable(mHelpFading[i], displayMode, 0, yPos - FontSize, 
+                             (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth(), height);
 
       doRenderMessages(game, mInputCodeManager, mHelpItems[i], yPos - offset);
       yPos += height - offset;      
@@ -546,13 +548,13 @@ void HelpItemManager::resetInGameHelpMessages()
 // Write seen status to INI
 void HelpItemManager::saveAlreadySeenList()
 {
-   mGameSettings->getIniSettings()->mSettings.setVal("HelpItemsAlreadySeenList", getAlreadySeenString());
+   mGameSettings->setSetting(IniKey::HelpItemsAlreadySeenList, getAlreadySeenString());
 }
 
 
 void HelpItemManager::loadAlreadySeenList()
 {
-   setAlreadySeenString(mGameSettings->getIniSettings()->mSettings.getVal<string>("HelpItemsAlreadySeenList"));
+   setAlreadySeenString(mGameSettings->getSetting<string>(IniKey::HelpItemsAlreadySeenList));
 }
 
 

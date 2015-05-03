@@ -10,6 +10,7 @@
 #  error "UI.h shouldn't be included in dedicated build"
 #endif
 
+#include "RenderManager.h"
 #include "lineEditor.h"
 #include "InputCode.h"
 #include "SymbolShape.h"
@@ -28,10 +29,6 @@ namespace Zap
 
 using namespace UI;
 
-extern F32 gLineWidth1;
-extern F32 gDefaultLineWidth;
-extern F32 gLineWidth3;
-extern F32 gLineWidth4;
 
 static const F32 HIGHLIGHTED_OBJECT_BUFFER_WIDTH = 14.0;      // Width to buffer objects higlighted by inline help system
 
@@ -43,24 +40,28 @@ class ClientGame;
 class GameSettings;
 class UIManager;
 class Color;
+class MasterServerConnection;
 
-class UserInterface
+class UserInterface: public RenderManager
 {
    friend class UIManager;    // Give UIManager access to private and protected members
 
 private:
    ClientGame *mClientGame;
+   UIManager *mUiManager;
+
    U32 mTimeSinceLastInput;
 
    static void doDrawAngleString(F32 x, F32 y, F32 size, F32 angle, const char *string, bool autoLineWidth = true);
    static void doDrawAngleString(S32 x, S32 y, F32 size, F32 angle, const char *string, bool autoLineWidth = true);
 
 protected:
+   GameSettings *mGameSettings;
    bool mDisableShipKeyboardInput;                 // Disable ship movement while user is in menus
 
 public:
-   explicit UserInterface(ClientGame *game);       // Constructor
-   virtual ~UserInterface();                       // Destructor
+   explicit UserInterface(ClientGame *game, UIManager *uiManager);   // Constructor
+   virtual ~UserInterface();                                         // Destructor
 
    static const S32 MOUSE_SCROLL_INTERVAL = 100;
    static const S32 MAX_PASSWORD_LENGTH = 32;      // Arbitrary, doesn't matter, but needs to be _something_
@@ -90,7 +91,7 @@ public:
    void activate();
    void reactivate();
 
-   virtual void render();
+   virtual void render() const;
    virtual void idle(U32 timeDelta);
    virtual void onActivate();
    virtual void onDeactivate(bool nextUIUsesEditorScreenMode);
@@ -100,16 +101,18 @@ public:
    virtual bool usesEditorScreenMode() const;   // Returns true if the UI attempts to use entire screen like editor, false otherwise
 
    void renderConsole()const;             // Render game console
-   virtual void renderMasterStatus();     // Render master server connection status
+   virtual void renderMasterStatus(const MasterServerConnection *connectionToMaster) const;
 
    // Helpers to simplify dealing with key bindings
    static InputCode getInputCode(GameSettings *settings, BindingNameEnum binding);
-   string getEditorBindingString(GameSettings *settings, EditorBindingNameEnum binding);
-   string getSpecialBindingString(GameSettings *settings, SpecialBindingNameEnum binding);
+   string getEditorBindingString (EditorBindingNameEnum  binding);
+   string getSpecialBindingString(SpecialBindingNameEnum binding);
 
-   void setInputCode(GameSettings *settings, BindingNameEnum binding, InputCode inputCode);
+   void setInputCode(BindingNameEnum binding, InputCode inputCode);
    bool checkInputCode(BindingNameEnum, InputCode inputCode);
-   const char *getInputCodeString(GameSettings *settings, BindingNameEnum binding);
+   const char *getInputCodeString(BindingNameEnum binding) const;
+
+   void setUiManager(UIManager *uiManager);
 
    // Input event handlers
    virtual bool onKeyDown(InputCode inputCode);
@@ -122,7 +125,7 @@ public:
    void renderMessageBox(const string &title, const string &instr, const string &message, S32 vertOffset = 0, S32 style = 1) const;
 
    // New school
-   void renderMessageBox(const SymbolShapePtr &title, const SymbolShapePtr &instr, SymbolShapePtr *message, S32 msgLines, S32 vertOffset = 0, S32 style = 1) const;
+   void renderMessageBox(const SymbolShapePtr &title, const SymbolShapePtr &instr, const SymbolShapePtr *message, S32 msgLines, S32 vertOffset = 0, S32 style = 1) const;
 
    static void renderCenteredFancyBox(S32 boxTop, S32 boxHeight, S32 inset, S32 cornerInset, const Color &fillColor, F32 fillAlpha, const Color &borderColor);
 

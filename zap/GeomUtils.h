@@ -81,15 +81,20 @@ bool segmentsColinear(const Point &p1, const Point &p2, const Point &p3, const P
 bool segsOverlap(const Point &p1, const Point &p2, const Point &p3, const Point &p4, Point &overlapStart, Point &overlapEnd);
 bool zonesTouch(const Vector<Point> *zone1, const Vector<Point> *zone2, F32 scaleFact, Point &overlapStart, Point &overlapEnd);
 bool pointOnSegment(const Point &c, const Point &a, const Point &b, F32 closeEnough);
-bool polygonCircleIntersect(const Point *inVertices, int inNumVertices, const Point &inCenter, F32 inRadiusSq, Point &outPoint, Point *ignoreVelocityEpsilon = NULL);
+bool polygonCircleIntersect(const Point *inVertices, int inNumVertices, const Point &inCenter, F32 inRadiusSq, 
+                            Point &outPoint, Point *ignoreVelocityEpsilon = NULL);
 bool circleCircleIntersect(const Point &center1, F32 radius1, const Point &center2, F32 radius2);
 
 bool polygonsIntersect(const Vector<Point> &p1, const Vector<Point> &p2);
 bool polygonIntersectsSegment(const Vector<Point> &points, const Point &start, const Point &end);  // This is four times faster than the Detailed one.
-bool polygonIntersectsSegmentDetailed(const Point *poly, U32 vertexCount, bool format, const Point &start, const Point &end, float &collisionTime, Point &normal);
-bool circleIntersectsSegment(Point center, F32 radius, Point start, Point end, float &collisionTime);
+bool polygonIntersectsSegmentDetailed(const Point *poly, U32 vertexCount, bool format, 
+                                      const Point &start, const Point &end, 
+                                      F32 &collisionTime, Point &normal);
+bool circleIntersectsSegment(Point center, F32 radius, Point start, Point end, F32 &collisionTime);
 
-Point findCentroid(const Vector<Point> &polyPoints);
+Point findCentroid(const Vector<Point> &polyPoints, bool isPolyline);
+void simpleHull_2D(const Vector<Point> &P, Vector<Point> &H);
+
 F32 area(const Vector<Point> &polyPoints);
 F32 angleOfLongestSide(const Vector<Point> &polyPoints);
 
@@ -134,13 +139,19 @@ void polyMeshToPolygons(const rcPolyMesh &mesh, Vector<Vector<Point> > &result);
 // Convert a Polygons to a list of points in a-b b-c c-d d-a format
 void unpackPolygons(const Vector<Vector<Point> > &solution, Vector<Point> &lineSegmentPoints);
 
-// test if a complex polygon has clockwise point winding order
+// Test if a complex polygon has clockwise point winding order
 bool isWoundClockwise(const Vector<Point>& inputPoly);
+bool isWoundClockwise(const Vector<Point> *inputPoly);
 
 
 // Return true out if point is in polygon given a triangulated fill
 bool triangulatedFillContains(const Vector<Point> *triangulatedFillPoints, const Point &point);
 bool isConvex(const Vector<Point> *verts);
+
+void generatePointsInACurve(F32 startAngle, F32 endAngle, S32 numPoints, F32 radius, Vector<Point> &points);
+void generatePointsInACircle(S32 numPoints, F32 radius, Vector<Point> &points);
+void generatePointsInASemiCircle(S32 numPoints, F32 radius, Vector<Point> &points);
+void generatePointsInARectangle(F32 width, F32 y1, F32 y2, Vector<Point> &points);
 
 // scale Geometric points for clipper
 Paths upscaleClipperPoints(const Vector<const Vector<Point> *> &inputPolygons);

@@ -5,6 +5,10 @@
 
 #include "UIEditor.h"
 
+#include "ClientGame.h"
+#include "UIManager.h"
+#include "WallItem.h"
+
 #include "TestUtils.h"
 #include "gtest/gtest.h"
 
@@ -13,10 +17,67 @@
 namespace Zap
 {
 
+TEST(EditorTest, findSnapVertexTest)
+{
+   ClientGame *clientGame = newClientGame();
+   EditorUserInterface *editorUi = clientGame->getUIManager()->getUI<EditorUserInterface>();
+   editorUi->setLevel(boost::shared_ptr<Level>(new Level()));
+
+   ASSERT_EQ(0, editorUi->getLevel()->getObjectCount());     // Confirm level starts empty
+
+   // 5 vertex wall in stair-step pattern, with middle vertex on 0,0
+   editorUi->getLevel()->parseLevelLine("BarrierMaker 10 -100 -100  0 -100  0 0  100 0  100 100", "NoFile");
+
+   ASSERT_EQ(1, editorUi->getLevel()->getObjectCount());     // Confirm object was added properly
+
+   // Mark first 3 vertices as being selected
+   WallItem *wall = static_cast<WallItem *>(editorUi->getLevel()->getObjectByIndex(0));
+   wall->aselectVert(0);
+   wall->aselectVert(1);
+   wall->aselectVert(2);
+
+   ASSERT_TRUE(wall->vertSelected(0));
+   ASSERT_TRUE(wall->vertSelected(1));
+   ASSERT_TRUE(wall->vertSelected(2));
+   ASSERT_FALSE(wall->vertSelected(3));
+   ASSERT_FALSE(wall->vertSelected(4));
+
+   editorUi->mMousePos.set(3,3);          // In canvas coords; near vertex 2
+   editorUi->findSnapVertex();
+   EXPECT_EQ(2, editorUi->mSnapVertexIndex);
+
+   editorUi->mMousePos.set(95,105);       // Near vertex 4, which is not selected --> closest selected is 2
+   editorUi->findSnapVertex();
+   EXPECT_EQ(2, editorUi->mSnapVertexIndex);
+
+   editorUi->mMousePos.set(-88,-106);     // Near vertex 0, which is selected  
+   editorUi->findSnapVertex();
+   EXPECT_EQ(0, editorUi->mSnapVertexIndex);
+
+   wall->unselectVert(0);
+   ASSERT_FALSE(wall->vertSelected(0));
+   ASSERT_TRUE(wall->vertSelected(1));
+   ASSERT_TRUE(wall->vertSelected(2));
+   ASSERT_FALSE(wall->vertSelected(3));
+   ASSERT_FALSE(wall->vertSelected(4));
+
+   editorUi->mMousePos.set(-88, -106);    // Near vertex 0, which is not selected   --> closest selected is 1
+   editorUi->findSnapVertex();
+   EXPECT_EQ(1, editorUi->mSnapVertexIndex);
+
+   editorUi->mMousePos.set(3, 3);         // In canvas coords; near vertex 2
+   editorUi->findSnapVertex();
+   EXPECT_EQ(2, editorUi->mSnapVertexIndex);
+
+   // Cleanup
+   delete newClientGame();
+}
+
+
 TEST(EditorTest, panZoom)
 {
    GamePair pair;
-   EditorUserInterface editorUi(pair.getClient(0));
+   EditorUserInterface editorUi(pair.getClient(0), NULL);
 
    // The basics
    F32 scale = 1.1f;
@@ -49,7 +110,7 @@ TEST(EditorTest, panZoom)
    r = editorUi.getDisplayExtents();      
    ASSERT_FLOAT_EQ(-166.666667f, r.min.x);   // These depend on 800x600 display aspect ratio
    ASSERT_FLOAT_EQ(1166.666667f, r.max.x);
-   ASSERT_TRUE(abs(r.min.y) < .0001);        // We're getting errors here too great to use ASSERT_FLOAT_EQ
+   ASSERT_TRUE(fabs(r.min.y) < .0001);        // We're getting errors here too great to use ASSERT_FLOAT_EQ
    ASSERT_FLOAT_EQ(1000       , r.max.y);
 
    ASSERT_FLOAT_EQ(r.getCenter().x, editorUi.getDisplayCenter().x);

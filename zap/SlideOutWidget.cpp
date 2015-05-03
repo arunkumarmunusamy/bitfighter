@@ -8,7 +8,10 @@
 #include "DisplayManager.h"          // For DisplayManager::getScreenInfo() def
 #include "Point.h"
 #include "Colors.h"
-#include "OpenglUtils.h"
+
+#ifdef TNL_OS_WIN32 
+#  include <windows.h>     // For ARRAYSIZE def
+#endif
 
 #include "tnlVector.h"
 
@@ -95,7 +98,7 @@ S32 SlideOutWidget::getTotalDisplayWidth() const
 // Gets run when opening animation is complete
 void SlideOutWidget::onWidgetOpened() 
 { 
-   /* Do nothing */ 
+   // Do nothing
 }
 
 
@@ -245,12 +248,12 @@ void SlideOutWidget::renderSlideoutWidgetFrame(S32 ulx, S32 uly, S32 width, S32 
 
 
    // Fill
-   glColor(Colors::black, 0.70f);
-   renderPointVector(&points, GL_TRIANGLE_FAN);
+   mGL->glColor(Colors::black, 0.70f);
+   mGL->renderPointVector(&points, GLOPT::TriangleFan);
 
    // Border
-   glColor(borderColor);
-   renderPointVector(&points, GL_LINE_STRIP);
+   mGL->glColor(borderColor);
+   mGL->renderPointVector(&points, GLOPT::LineStrip);
 }
 
 

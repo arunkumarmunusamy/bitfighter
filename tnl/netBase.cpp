@@ -184,15 +184,58 @@ SafePtrData::~SafePtrData()
    }
 }
 
+////////////////////////////////////////
+////////////////////////////////////////
+
+RefPtrData::RefPtrData()
+{ 
+   mRefCount = 0; 
+}
+
+
+RefPtrData::RefPtrData(const RefPtrData &copy)
+{ 
+   mRefCount = 0; 
+}
+
+
 void RefPtrData::destroySelf()
 {
    delete this;
 }
 
+
 RefPtrData::~RefPtrData()
 {
    TNLAssert(mRefCount == 0, "Error! Object deleted with non-zero reference count!");
 }
+
+
+void RefPtrData::incRef()
+{
+   mRefCount++;
+}
+
+
+void RefPtrData::decRef()
+{
+   // Check if count is already 0; if so, we can delete without stress.  Check ensures the following:
+   // TestItem *test = new TestItem();  SafePtr<TestItem> testPtr = test;  delete test;
+   // makes testPtr.isNull() == true
+   if(mRefCount > 0)
+      mRefCount--;
+
+   if(!mRefCount)
+      destroySelf();
+}
+
+
+// Used primarily for asserting things
+U32 RefPtrData::getRefCount()
+{
+   return mRefCount;
+}
+
 
 //--------------------------------------
 NetClassRep* Object::getClassRep() const

@@ -59,7 +59,7 @@ public:
    void render() const;
    F32 getFraction() const;
 
-   void renderEngineeredItemDeploymentMarker(const Ship *ship);
+   void renderEngineeredItemDeploymentMarker(const Ship *ship) const;
 
    bool isChatAllowed() const;
    bool isMovementDisabled() const;
@@ -84,6 +84,9 @@ public:
    const char *getChatMessage() const;
 
    const HelperMenu *getActiveHelper() const;
+
+   ///// Testing
+   friend struct GamePair;
 };
 
 

@@ -30,7 +30,7 @@ private:
    U32 mVertOffset;
 
 public:
-   explicit MessageUserInterface(ClientGame *game);     // Constructor
+   explicit MessageUserInterface(ClientGame *game, UIManager *uiManager);     // Constructor
    virtual ~MessageUserInterface();
 
    char *mMessage[mNumLines];
@@ -42,7 +42,7 @@ public:
    void setStyle(U32 style);                 // Use a preset menu style
    void reset();
    void idle(U32 t);
-   void render();
+   void render() const;
    void quit();
    bool onKeyDown(InputCode inputCode);
 };

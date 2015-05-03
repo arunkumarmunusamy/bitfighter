@@ -72,11 +72,13 @@ public:
    void packGeom(GhostConnection *connection, BitStream *stream);
    void unpackGeom(GhostConnection *connection, BitStream *stream);
    void setGeom(const Vector<Point> &points);
+   Vector<Point> getGeom() const;
+
 
    string geomToLevelCode() const;
    void readGeom(S32 argc, const char **argv, S32 firstCoord, F32 gridSize);
 
-   virtual Rect calcExtents();
+   virtual Rect calcExtents() const;
 };
 
 
@@ -122,11 +124,13 @@ public:
    void packGeom(GhostConnection *connection, BitStream *stream);
    void unpackGeom(GhostConnection *connection, BitStream *stream); 
    void setGeom(const Vector<Point> &points);
+   Vector<Point> getGeom() const;
+
 
    string geomToLevelCode() const;
    void readGeom(S32 argc, const char **argv, S32 firstCoord, F32 gridSize);
 
-   virtual Rect calcExtents();
+   virtual Rect calcExtents() const;
 };
 
 
@@ -140,6 +144,7 @@ typedef Geometry Parent;
 
 private:
    Point mCentroid;
+   virtual Point doFindCentroid(const Vector<Point> &pts) const;
 
 protected:
    Vector<Point> mPolyBounds;
@@ -182,12 +187,13 @@ public:
    void packGeom(GhostConnection *connection, BitStream *stream);
    void unpackGeom(GhostConnection *connection, BitStream *stream); 
    void setGeom(const Vector<Point> &points);
+   Vector<Point> getGeom() const;
 
    string geomToLevelCode() const;
    virtual void readGeom(S32 argc, const char **argv, S32 firstCoord, F32 gridSize);
    virtual void onPointsChanged();
 
-   virtual Rect calcExtents();
+   virtual Rect calcExtents() const;
 };
 
 
@@ -202,6 +208,8 @@ private:
    Vector<Point> mPolyFill;
    F32 mLabelAngle;
    bool mTriangluationDisabled;     // Allow optimization of adding points for polygons that will never be displayed
+
+   Point doFindCentroid(const Vector<Point> &pts) const;
 
 public:
    PolygonGeometry();      // Constructor

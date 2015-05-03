@@ -4,15 +4,19 @@
 //------------------------------------------------------------------------------
 
 #include "LineItem.h"
+
+#include "Level.h"
 #include "game.h"
 #include "ship.h"
-#include "gameObjectRender.h"    // For renderPolyLineVertices()
+#include "GameObjectRender.h"    // For renderPolyLineVertices()
 #include "stringUtils.h"         // For itos
 #include "tnlGhostConnection.h"
 
 #ifndef ZAP_DEDICATED
+#  include "GameObjectRender.h"  // For renderPolyLineVertices()
+#  include "RenderUtils.h"
 #  include "ClientGame.h"
-#  include "UIEditorMenus.h"     // For EditorAttributeMenuUI def
+#  include "UIQuickMenu.h"       // For EditorAttributeMenuUI def
 #endif
 
 
@@ -35,11 +39,6 @@ TNL_IMPLEMENT_NETOBJECT_RPC(LineItem, s2cSetGeom,
 
 const S32 LineItem::MIN_LINE_WIDTH = 1;
 const S32 LineItem::MAX_LINE_WIDTH = 255;
-
-// Statics:
-#ifndef ZAP_DEDICATED
-   EditorAttributeMenuUI *LineItem::mAttributeMenuUI = NULL;
-#endif
 
 // Combined C++ / Lua constructor
 /**
@@ -89,17 +88,16 @@ LineItem *LineItem::clone() const
 }
 
 
-F32 LineItem::getEditorRadius(F32 currentScale)
+F32 LineItem::getEditorRadius(F32 currentScale) const
 {
    return (F32)EditorObject::VERTEX_SIZE;
 }
 
 
-void LineItem::render()
+void LineItem::render() const
 {
 #ifndef ZAP_DEDICATED
-   if(shouldRender())
-      renderLine(getOutline(), getColor());
+   RenderUtils::drawLine(getOutline(), getColor());
 #endif
 }
 
@@ -109,39 +107,36 @@ bool LineItem::shouldRender() const
    if(mGlobal)
       return true;
 
-   if(!isGhost()) // always render when in editor
-      return true;
-
 #ifndef ZAP_DEDICATED
-   S32 ourTeam = static_cast<ClientGame*>(getGame())->getCurrentTeamIndex();
+   //S32 ourTeam = static_cast<ClientGame*>(getGame())->getCurrentTeamIndex();
 
-   // Don't render opposing team's line items
+   //// Don't render opposing team's line items
    // Always render all teams when in editor
    // ourTeam == TEAM_NEUTRAL when in editor
-   if(ourTeam != getTeam() && getTeam() != TEAM_NEUTRAL && ourTeam != TEAM_NEUTRAL)
-      return false;
+   //if(ourTeam != getTeam() && getTeam() != TEAM_NEUTRAL && ourTeam != TEAM_NEUTRAL)
+   //   return false;
 #endif
 
+   // Render item regardless of team when in editor (local remote ClientInfo will be NULL)
    return true;
 }
 
 
-void LineItem::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices)
+void LineItem::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices) const
 {
 #ifndef ZAP_DEDICATED
-   const Color *color = NULL;       // HACK!  Should pass desired color into renderEditor instead of using NULL here
+   if(isSelected() || isLitUp())
+      RenderUtils::drawLine(getOutline());
+   else
+      RenderUtils::drawLine(getOutline(), getEditorRenderColor());
 
-   if(!isSelected() && !isLitUp())           
-      color = getEditorRenderColor();
-
-   renderLine(getOutline(), color);
    if(renderVertices)
-      renderPolyLineVertices(this, snappingToWallCornersEnabled, currentScale);
+      GameObjectRender::renderPolyLineVertices(this, snappingToWallCornersEnabled, currentScale);
 #endif
 }
 
 
-const Color *LineItem::getEditorRenderColor() 
+const Color &LineItem::getEditorRenderColor() const
 { 
    return getColor(); 
 }
@@ -156,7 +151,7 @@ S32 LineItem::getRenderSortValue()
 
 // Create objects from parameters stored in level file
 // LineItem <team> <width> <x> <y> ...
-bool LineItem::processArguments(S32 argc, const char **argv, Game *game)
+bool LineItem::processArguments(S32 argc, const char **argv, Level *level)
 {
    if(argc < 6)
       return false;
@@ -173,9 +168,9 @@ bool LineItem::processArguments(S32 argc, const char **argv, Game *game)
    else
       mGlobal = false;
 
-   readGeom(argc, argv, firstCoord, game->getLegacyGridSize());
+   readGeom(argc, argv, firstCoord, level->getLegacyGridSize());
 
-   computeExtent();
+   updateExtentInDatabase();
 
    return true;
 }
@@ -202,6 +197,7 @@ void LineItem::onAddedToGame(Game *game)
       setScopeAlways();
 }
 
+
 void LineItem::onGhostAvailable(GhostConnection* connection)
 {
    Parent::onGhostAvailable(connection);
@@ -210,6 +206,7 @@ void LineItem::onGhostAvailable(GhostConnection* connection)
    connection->postNetEvent(theEvent);
 }
 
+
 void LineItem::onGhostAddBeforeUpdate(GhostConnection* connection)
 {
    Parent::onGhostAddBeforeUpdate(connection);
@@ -217,10 +214,10 @@ void LineItem::onGhostAddBeforeUpdate(GhostConnection* connection)
 }
 
 
-// Bounding box for quick collision-possibility elimination, and display scoping purposes
-void LineItem::computeExtent()
+bool LineItem::isVisibleToTeam(S32 teamIndex) const
 {
-   updateExtentInDatabase();
+   // LineItems are only visible to those on the same team, unless they're neutral or "global"
+   return mGlobal || getTeam() == teamIndex || getTeam() == TEAM_NEUTRAL;
 }
 
 
@@ -263,13 +260,15 @@ void LineItem::unpackUpdate(GhostConnection *connection, BitStream *stream)
 
 F32 LineItem::getUpdatePriority(GhostConnection *connection, U32 updateMask, S32 updateSkips)
 {
+   F32 basePriority = Parent::getUpdatePriority(connection, updateMask, updateSkips);
+
    // Lower priority for initial update.  This is to work around network-heavy loading of levels
    // with many LineItems, which will stall the client and prevent you from moving your ship
    if(isInitialUpdate())
-      return Parent::getUpdatePriority(connection, updateMask, updateSkips) - 1000.f;
+      return basePriority - 1000.f;
 
    // Normal priority otherwise so Geom changes are immediately visible to all clients
-   return Parent::getUpdatePriority(connection, updateMask, updateSkips);
+   return basePriority;
 }
 
 
@@ -325,36 +324,18 @@ void LineItem::setGeom(lua_State *L, S32 stackIndex)
 
 void LineItem::onGeomChanged()
 {
-   onPointsChanged();        // Recalculates centroid
    Parent::onGeomChanged();
 }
 
 
 #ifndef ZAP_DEDICATED
 
-EditorAttributeMenuUI *LineItem::getAttributeMenu()
-{
-   // Lazily initialize this -- if we're in the game, we'll never need this to be instantiated
-   if(!mAttributeMenuUI)
-   {
-      ClientGame *clientGame = static_cast<ClientGame *>(getGame());
-
-      mAttributeMenuUI = new EditorAttributeMenuUI(clientGame);
-
-      mAttributeMenuUI->addMenuItem(new YesNoMenuItem("Global:", true, "Viewable by all teams"));
-
-      // Add our standard save and exit option to the menu
-      mAttributeMenuUI->addSaveAndQuitMenuItem();
-   }
-
-   return mAttributeMenuUI;
-}
-
-
 // Get the menu looking like what we want
-void LineItem::startEditingAttrs(EditorAttributeMenuUI *attributeMenu)
+bool LineItem::startEditingAttrs(EditorAttributeMenuUI *attributeMenu)
 {
    attributeMenu->getMenuItem(0)->setIntValue(mGlobal ? 1 : 0);
+
+   return true;
 }
 
 
@@ -374,10 +355,10 @@ void LineItem::fillAttributesVectors(Vector<string> &keys, Vector<string> &value
 #endif
 
 
-const char *LineItem::getOnScreenName()     { return "Line";      }
-const char *LineItem::getPrettyNamePlural() { return "LineItems"; }
-const char *LineItem::getOnDockName()       { return "LineItem";  }
-const char *LineItem::getEditorHelpString() { return "Draws a line on the map.  Visible only to team, or to all if neutral."; }
+const char *LineItem::getOnScreenName()     const  { return "Line";      }
+const char *LineItem::getPrettyNamePlural() const  { return "LineItems"; }
+const char *LineItem::getOnDockName()       const  { return "LineItem";  }
+const char *LineItem::getEditorHelpString() const  { return "Draws a line on the map.  Visible only to team, or to all if neutral."; }
 
 bool LineItem::hasTeam()      { return true; }
 bool LineItem::canBeHostile() { return true; }
@@ -439,7 +420,7 @@ S32 LineItem::lua_setGlobal(lua_State *L)
  *
  * @brief Returns the LineItem's global parameter.
  *
- * @return `true` if global is enabled, `false` if not.
+ * @return 'true' if global is enabled, 'false' if not.
  */
 S32 LineItem::lua_getGlobal(lua_State *L)
 {

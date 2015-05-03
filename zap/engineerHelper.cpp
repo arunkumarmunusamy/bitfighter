@@ -12,10 +12,9 @@
 #include "ClientGame.h"
 #include "JoystickRender.h"
 #include "config.h"
-#include "gameObjectRender.h"    // For drawSquare
+#include "GameObjectRender.h"    // For drawSquare
 
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 
 namespace Zap
 {
@@ -49,6 +48,15 @@ EngineerHelper::EngineerHelper() :
    mEngineerItemsDisplayWidth( getWidthOfItems() )
 {
    mSelectedIndex = -1;
+
+   mCurrentRenderItems = engineerItemInfo;
+   mCurrentRenderCount = ARRAYSIZE(engineerItemInfo);
+                              
+   mPrevRenderItems = NULL;
+   mPrevRenderCount = 0;
+
+   mTitle = menuTitle;
+   mLegend = NULL;
 }
 
 
@@ -66,7 +74,7 @@ S32 EngineerHelper::getWidthOfItems() const
    // we pass.  Therefore, to make everything look nice, we need to subtract that bit off here so we don't end up with a 
    // much wider menu than necessary.  Add the horizMargin to make things look balanced.
    S32 maxItemWidth = getMaxItemWidth(engineerItemInfo, ARRAYSIZE(engineerItemInfo));
-   S32 titleWidth = getStringWidth(MENU_FONT_SIZE, menuTitle) - (ITEM_INDENT + 2 * ITEM_HELP_PADDING) +
+   S32 titleWidth = RenderUtils::getStringWidth(MENU_FONT_SIZE, menuTitle) - (ITEM_INDENT + 2 * ITEM_HELP_PADDING) +
                                          UserInterface::horizMargin;
 
    return max(maxItemWidth, titleWidth);
@@ -97,21 +105,21 @@ void EngineerHelper::onActivated()
 }
 
 
-void EngineerHelper::render()
+void EngineerHelper::render() const
 {
    S32 yPos = MENU_TOP + MENU_PADDING;
    
    if(isMenuBeingDisplayed())    // Haven't selected an item yet, so show the menu
-      drawItemMenu(menuTitle, engineerItemInfo, ARRAYSIZE(engineerItemInfo), NULL, 0, mEngineerItemsDisplayWidth, mEngineerButtonsWidth);
+      drawItemMenu(mEngineerItemsDisplayWidth, mEngineerButtonsWidth);
 
    else     // Have selected a module, need to indicate where to deploy
    {
       S32 xPos = UserInterface::horizMargin;
 
-      glColor(Colors::green);
-      drawStringf(xPos, yPos, MENU_FONT_SIZE, "Placing %s.", engineerItemInfo[mSelectedIndex].name);
+      mGL->glColor(Colors::green);
+      RenderUtils::drawStringf(xPos, yPos, MENU_FONT_SIZE, "Placing %s.", engineerItemInfo[mSelectedIndex].name);
       yPos += MENU_FONT_SIZE + MENU_FONT_SPACING;
-      drawString(xPos, yPos, MENU_FONT_SIZE, engineerInstructions[mSelectedIndex]);
+      RenderUtils::drawString(xPos, yPos, MENU_FONT_SIZE, engineerInstructions[mSelectedIndex]);
    }
 }
 
@@ -166,7 +174,7 @@ bool EngineerHelper::processInputCode(InputCode inputCode)
 
          // Check deployment status on client; will be checked again on server,
          // but server will only handle likely valid placements
-         if(deployer.canCreateObjectAtLocation(getGame()->getGameObjDatabase(), ship, engineerItemInfo[mSelectedIndex].itemIndex))
+         if(deployer.canCreateObjectAtLocation(getGame()->getLevel(), ship, engineerItemInfo[mSelectedIndex].itemIndex))
          {
             // Send command to server to deploy
             getGame()->getConnectionToServer()->c2sEngineerDeployObject(engineerItemInfo[mSelectedIndex].itemIndex);
@@ -210,7 +218,7 @@ S32 EngineerHelper::getAnimationTime() const
 
 
 // Basically draws a red box where the ship is pointing
-void EngineerHelper::renderDeploymentMarker(const Ship *ship)
+void EngineerHelper::renderDeploymentMarker(const Ship *ship) const
 {
    static Point deployPosition, deployNormal;      // Reusable containers
 
@@ -221,19 +229,20 @@ void EngineerHelper::renderDeploymentMarker(const Ship *ship)
          EngineerModuleDeployer::findDeployPoint(ship, item, deployPosition, deployNormal))
    {
       EngineerModuleDeployer deployer;
-      bool canDeploy = deployer.canCreateObjectAtLocation(getGame()->getGameObjDatabase(), ship, item);
+      Level *level = getGame()->getLevel();
+      bool canDeploy = deployer.canCreateObjectAtLocation(level, ship, item);
 
       switch(engineerItemInfo[mSelectedIndex].itemIndex)
       {
          case EngineeredTurret:
          case EngineeredForceField:
-            glColor(canDeploy ? Colors::green : Colors::red);
-            drawSquare(deployPosition, 5);
+            mGL->glColor(canDeploy ? Colors::green : Colors::red);
+            RenderUtils::drawSquare(deployPosition, 5);
             break;
 
          case EngineeredTeleporterEntrance:
          case EngineeredTeleporterExit:
-            renderTeleporterOutline(deployPosition, 75.f, canDeploy ? Colors::green : Colors::red);
+            GameObjectRender::renderTeleporterOutline(deployPosition, 75.f, canDeploy ? Colors::green : Colors::red);
             break;
 
          default:

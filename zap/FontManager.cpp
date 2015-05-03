@@ -8,7 +8,7 @@
 #include "GameSettings.h"
 #include "DisplayManager.h"
 
-#include "OpenglUtils.h"         // For various rendering helpers
+#include "RenderUtils.h"         // For various rendering helpers
 #include "stringUtils.h"         // For getFileSeparator()
 #include "MathUtils.h"           // For MIN/MAX
 
@@ -18,7 +18,12 @@
 #include "FontOrbitronMedium.h"
 
 #include "../fontstash/stb_truetype.h"
-#include <tnlPlatform.h>
+
+#include "tnlPlatform.h"
+
+extern "C" {
+#  include "../fontstash/fontstash.h"
+}
 
 #include <string>
 
@@ -72,7 +77,7 @@ BfFont::BfFont(const string &fontFile, GameSettings *settings)
    }
 
    if(mStashFontId <= 0) {
-      string file = settings->getFolderManager()->fontsDir + getFileSeparator() + fontFile;
+      string file = settings->getFolderManager()->getFontsDir() + getFileSeparator() + fontFile;
       mStashFontId = sth_add_font(FontManager::getStash(), file.c_str());
    }
 
@@ -124,10 +129,18 @@ static BfFont *fontList[FontCount] = {NULL};
 sth_stash *FontManager::mStash = NULL;
 bool FontManager::mUsingExternalFonts = true;
 
+// Constructor
 FontManager::FontManager()
 {
    for(S32 i = 0; i < FontCount; i++)
       fontList[i] = NULL;
+}
+
+
+// Destructor
+FontManager::~FontManager()
+{
+   // Do nothing
 }
 
 
@@ -143,6 +156,8 @@ void FontManager::reinitialize(GameSettings *settings)
 void FontManager::initialize(GameSettings *settings, bool useExternalFonts)
 {
    cleanup();  // Makes sure its been cleaned up first, many tests call init without cleanup
+
+   TNLAssert(mGL != NULL, "RenderManager is NULL.  Bad things will happen!");
 
    mUsingExternalFonts = useExternalFonts;
 
@@ -167,8 +182,8 @@ void FontManager::initialize(GameSettings *settings, bool useExternalFonts)
       fontList[FontPlayBold]       = new BfFont("Play-Bold.ttf",       settings);
       fontList[FontModernVision]   = new BfFont("Modern-Vision.ttf",   settings);
 
-      // set texture blending function
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      // Set texture blending function
+      mGL->setDefaultBlendFunction();
    }
 }
 
@@ -233,6 +248,7 @@ void FontManager::setFontContext(FontContext fontContext)
       case LevelInfoContext:
       case ScoreboardContext:
       case MenuHeaderContext:
+      case EditorWarningContext:
          setFont(FontPlay);
          return;
 
@@ -339,9 +355,9 @@ void FontManager::drawStrokeCharacter(const SFG_StrokeFont *font, S32 character)
         characterVertexArray[2*j]     = strip->Vertices[j].X;
         characterVertexArray[(2*j)+1] = strip->Vertices[j].Y;
       }
-      renderVertexArray(characterVertexArray, strip->Number, GL_LINE_STRIP);
+      mGL->renderVertexArray(characterVertexArray, strip->Number, GLOPT::LineStrip);
    }
-   glTranslatef( schar->Right, 0.0, 0.0 );
+   mGL->glTranslate(schar->Right, 0);
 }
 
 
@@ -360,7 +376,7 @@ BfFont *FontManager::getFont(FontId currentFontId)
 }
 
 
-S32 FontManager::getStringLength(const char* string)
+F32 FontManager::getStringLength(const char* string)
 {
    BfFont *font = getFont(currentFontId);
 
@@ -371,7 +387,7 @@ S32 FontManager::getStringLength(const char* string)
 }
 
 
-S32 FontManager::getStrokeFontStringLength(const SFG_StrokeFont *font, const char *string)
+F32 FontManager::getStrokeFontStringLength(const SFG_StrokeFont *font, const char *string)
 {
    TNLAssert(font, "Null font!");
 
@@ -381,7 +397,7 @@ S32 FontManager::getStrokeFontStringLength(const SFG_StrokeFont *font, const cha
    F32 length = 0.0;
    F32 lineLength = 0.0;
 
-   while(U8 c = *string++)
+   while(unsigned char c = *string++)
       if(c < font->Quantity )
       {
          if(c == '\n')  // EOL; reset the length of this line 
@@ -401,20 +417,18 @@ S32 FontManager::getStrokeFontStringLength(const SFG_StrokeFont *font, const cha
    if(length < lineLength)
       length = lineLength;
 
-   return S32(length + 0.5);
+   return length + 0.5f;
 }
 
 
-S32 FontManager::getTtfFontStringLength(BfFont *font, const char *string)
+F32 FontManager::getTtfFontStringLength(BfFont *font, const char *string)
 {
    F32 minx, miny, maxx, maxy;
    sth_dim_text(mStash, font->getStashFontId(), legacyRomanSizeFactorThanksGlut, string, &minx, &miny, &maxx, &maxy);
 
-   return S32(maxx - minx);
+   return maxx - minx;
 }
 
-
-extern F32 gDefaultLineWidth;
 
 void FontManager::renderString(F32 size, const char *string)
 {
@@ -423,20 +437,20 @@ void FontManager::renderString(F32 size, const char *string)
    if(font->isStrokeFont())
    {
       static F32 modelview[16];
-      glGetFloatv(GL_MODELVIEW_MATRIX, modelview);    // Fills modelview[]
+      mGL->glGetValue(GLOPT::ModelviewMatrix, modelview);    // Fills modelview[]
 
       // Clamp to range of 0.5 - 1 then multiply by line width (2 by default)
       F32 linewidth =
-            CLAMP(size * DisplayManager::getScreenInfo()->getPixelRatio() * modelview[0] * 0.05f, 0.5f, 1.0f) * gDefaultLineWidth;
+            CLAMP(size * DisplayManager::getScreenInfo()->getPixelRatio() * modelview[0] * 0.05f, 0.5f, 1.0f) * RenderUtils::DEFAULT_LINE_WIDTH;
 
-      glLineWidth(linewidth);
+      mGL->glLineWidth(linewidth);
 
       F32 scaleFactor = size / 120.0f;  // Where does this magic number come from?
-      glScalef(scaleFactor, -scaleFactor, 1);
+      mGL->glScale(scaleFactor, -scaleFactor);
       for(S32 i = 0; string[i]; i++)
          FontManager::drawStrokeCharacter(font->getStrokeFont(), string[i]);
 
-      glLineWidth(gDefaultLineWidth);
+      mGL->glLineWidth(RenderUtils::DEFAULT_LINE_WIDTH);
    }
    else
    {
@@ -449,10 +463,11 @@ void FontManager::renderString(F32 size, const char *string)
       // correct for the pixelRatio scaling, and then generate a texture with twice
       // the resolution we need. This produces crisp, anti-aliased text even after the
       // texture is resampled.
-      F32 k = DisplayManager::getScreenInfo()->getPixelRatio() * 2.0f;
+      F32 k = DisplayManager::getScreenInfo()->getPixelRatio() * 2;
+      F32 rk = 1/k;
 
       // Flip upside down because y = -y
-      glScalef(1 / k, -1 / k, 1);
+      mGL->glScale(rk, -rk);
       // `size * k` becomes `size` due to the glScale above
       drawTTFString(font, string, size * k * legacyNormalizationFactor);
    }

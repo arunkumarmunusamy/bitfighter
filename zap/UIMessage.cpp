@@ -13,23 +13,25 @@
 #include "Colors.h"
 
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 
 #include <stdio.h>
 
 namespace Zap
 {
 
-MessageUserInterface::MessageUserInterface(ClientGame *game) : Parent(game)
+MessageUserInterface::MessageUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    // Do nothing
 }
+
 
 // Destructor
 MessageUserInterface::~MessageUserInterface()
 {
    // Do nothing
 }
+
 
 void MessageUserInterface::onActivate()
 {
@@ -119,7 +121,7 @@ void MessageUserInterface::idle(U32 timeDelta)
 }
 
 
-void MessageUserInterface::render()
+void MessageUserInterface::render() const
 {
    const F32 canvasWidth  = (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth();
    const F32 canvasHeight = (F32)DisplayManager::getScreenInfo()->getGameCanvasHeight();
@@ -145,24 +147,24 @@ void MessageUserInterface::render()
             wInset + mVertOffset,               canvasHeight - hInset
       };
 
-      glColor(Colors::red30, fadeFactor * 0.95f);  // Draw a box
-      renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GL_TRIANGLE_FAN);
+      mGL->glColor(Colors::red30, fadeFactor * 0.95f);  // Draw a box
+      mGL->renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GLOPT::TriangleFan);
 
-      glColor(Colors::white, fadeFactor);          // Add a border
-      renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GL_LINE_LOOP);
+      mGL->glColor(Colors::white, fadeFactor);          // Add a border
+      mGL->renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GLOPT::LineLoop);
    }
 
    // Draw title, message, and footer
-   glColor(mMessageColor, fadeFactor);
+   mGL->glColor(mMessageColor, fadeFactor);
 
    if(strcmp(mTitle, ""))  // If they are different
-      drawCenteredString(vertMargin + hInset + mVertOffset, 30, mTitle);
+      RenderUtils::drawCenteredString(vertMargin + hInset + mVertOffset, 30, mTitle);
 
    for(S32 i = 0; i < mNumLines; i++)
-      drawCenteredString(vertMargin + 40 + hInset + i * 24 + mVertOffset, 18, mMessage[i]);
+      RenderUtils::drawCenteredString(vertMargin + 40 + hInset + i * 24 + mVertOffset, 18, mMessage[i]);
 
    if (!mFadeTime)
-      drawCenteredString(canvasHeight - vertMargin - hInset - 18 + mVertOffset, 18, "Hit any key to continue");
+      RenderUtils::drawCenteredString(canvasHeight - vertMargin - hInset - 18 + mVertOffset, 18, "Hit any key to continue");
 }
 
 };

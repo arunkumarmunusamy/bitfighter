@@ -11,12 +11,9 @@
 #include "Colors.h"
 
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 
 namespace Zap
 {
-
-extern void drawHorizLine(S32 x1, S32 x2, S32 y);
 
 
 // Define static consts
@@ -32,8 +29,8 @@ using UI::SymbolStringSet;
 
 
 // Constructor
-AbstractInstructionsUserInterface::AbstractInstructionsUserInterface(ClientGame *clientGame) : 
-                                       Parent(clientGame),
+AbstractInstructionsUserInterface::AbstractInstructionsUserInterface(ClientGame *clientGame, UIManager *uiManager) :
+                                       Parent(clientGame, uiManager),
                                        mSpecialKeysInstrLeft(LineGap), 
                                        mSpecialKeysBindingsLeft(LineGap), 
                                        mSpecialKeysInstrRight(LineGap), 
@@ -53,7 +50,7 @@ AbstractInstructionsUserInterface::~AbstractInstructionsUserInterface()
 
 
 void AbstractInstructionsUserInterface::pack(SymbolStringSet &instrs,  SymbolStringSet &bindings,      // <== will be modified
-                                             const ControlStringsEditor *helpBindings, S32 bindingCount, GameSettings *settings)
+                                             const ControlStringsEditor *helpBindings, S32 bindingCount)
 {
    Vector<SymbolShapePtr> symbols;
 
@@ -82,13 +79,13 @@ void AbstractInstructionsUserInterface::pack(SymbolStringSet &instrs,  SymbolStr
       else     // Normal line
       {
          symbols.clear();
-         SymbolString::symbolParse(settings->getInputCodeManager(), helpBindings[i].command, 
+         SymbolString::symbolParse(mGameSettings->getInputCodeManager(), helpBindings[i].command,
                                    symbols, HelpContext, FontSize, true, txtColor, keyColor);
 
          instrs.add(SymbolString(symbols));
 
          symbols.clear();
-         SymbolString::symbolParse(settings->getInputCodeManager(), helpBindings[i].binding, 
+         SymbolString::symbolParse(mGameSettings->getInputCodeManager(), helpBindings[i].binding,
                                    symbols, HelpContext, FontSize, true, keyColor);
          bindings.add(SymbolString(symbols));
       }
@@ -96,37 +93,38 @@ void AbstractInstructionsUserInterface::pack(SymbolStringSet &instrs,  SymbolStr
 }
 
 
-void AbstractInstructionsUserInterface::render(const char *header, S32 page, S32 pages)
+void AbstractInstructionsUserInterface::render(const char *header, S32 page, S32 pages) const
 {
    static const char* prefix = "INSTRUCTIONS - ";
    static S32 fontSize = 25;
-   static S32 prefixWidth = getStringWidth(fontSize, prefix);
+   static S32 prefixWidth = RenderUtils::getStringWidth(fontSize, prefix);
 
    // Draw header first as different color, then everything else
-   glColor(Colors::cyan);
-   drawString(3 + prefixWidth, 3, fontSize, header);
+   mGL->glColor(Colors::cyan);
+   RenderUtils::drawString(3 + prefixWidth, 3, fontSize, header);
 
-   glColor(Colors::red);
-   drawString(3, 3, fontSize, prefix);
+   mGL->glColor(Colors::red);
+   RenderUtils::drawString(3, 3, fontSize, prefix);
 
-   drawStringf(625, 3, fontSize, "PAGE %d/%d", page, pages);
-   drawCenteredString(571, 20, "LEFT - previous page   |   RIGHT, SPACE - next page   |   ESC exits");
+   RenderUtils::drawStringf(625, 3, fontSize, "PAGE %d/%d", page, pages);
+   RenderUtils::drawCenteredString(571, 20, "LEFT - previous page   |   RIGHT, SPACE - next page   |   ESC exits");
 
-   glColor(Colors::gray70);
-   drawHorizLine(0, 800, 32);
-   drawHorizLine(0, 800, 569);
+   mGL->glColor(Colors::gray70);
+   RenderUtils::drawHorizLine(0, 800, 32);
+   RenderUtils::drawHorizLine(0, 800, 569);
 }
 
 
-void AbstractInstructionsUserInterface::renderConsoleCommands(const SymbolStringSet &instructions, const ControlStringsEditor *cmdList)
+void AbstractInstructionsUserInterface::renderConsoleCommands(const SymbolStringSet &instructions, 
+                                                              const ControlStringsEditor *cmdList) const
 {
    const S32 headerSize = 20;
    const S32 cmdSize = 16;
    const S32 cmdGap = 10;
 
    S32 ypos = 60;
-   S32 cmdCol = horizMargin;                                                         // Action column
-   S32 descrCol = horizMargin + S32(DisplayManager::getScreenInfo()->getGameCanvasWidth() * 0.25) + 55;   // Control column
+   S32 cmdCol = horizMargin;                                                                             // Action column
+   S32 descrCol = horizMargin + S32(DisplayManager::getScreenInfo()->getGameCanvasWidth() * 0.25) + 55;  // Control column
 
    ypos += instructions.render(cmdCol, ypos, UI::AlignmentLeft);
 
@@ -134,15 +132,15 @@ void AbstractInstructionsUserInterface::renderConsoleCommands(const SymbolString
 
    Color secColor =   Colors::yellow;
 
-   glColor(secColor);
-   drawString(cmdCol,   ypos, headerSize, "Code Example");
-   drawString(descrCol, ypos, headerSize, "Description");
+   mGL->glColor(secColor);
+   RenderUtils::drawString(cmdCol,   ypos, headerSize, "Code Example");
+   RenderUtils::drawString(descrCol, ypos, headerSize, "Description");
 
    Vector<SymbolShapePtr> symbols;
 
    ypos += cmdSize + cmdGap;
-   glColor(&Colors::gray70);
-   drawHorizLine(cmdCol, 750, ypos);
+   mGL->glColor(&Colors::gray70);
+   RenderUtils::drawHorizLine(cmdCol, 750, ypos);
 
    ypos += 10;     // Small gap before cmds start
    ypos += cmdSize;
@@ -151,20 +149,20 @@ void AbstractInstructionsUserInterface::renderConsoleCommands(const SymbolString
    {
       if(cmdList[i].command[0] == '-')      // Horiz spacer
       {
-         glColor(Colors::gray40);
-         drawHorizLine(cmdCol, cmdCol + 335, ypos + (cmdSize + cmdGap) / 4);
+         mGL->glColor(Colors::gray40);
+         RenderUtils::drawHorizLine(cmdCol, cmdCol + 335, ypos + (cmdSize + cmdGap) / 4);
       }
       else
       {
          symbols.clear();
-         SymbolString::symbolParse(getGame()->getSettings()->getInputCodeManager(), cmdList[i].command, 
+         SymbolString::symbolParse(mGameSettings->getInputCodeManager(), cmdList[i].command,
                                    symbols, HelpContext, cmdSize, true, txtColor, keyColor);
 
          SymbolString instrs(symbols);
          instrs.render(cmdCol, ypos, UI::AlignmentLeft);
 
          symbols.clear();
-         SymbolString::symbolParse(getGame()->getSettings()->getInputCodeManager(), cmdList[i].binding, 
+         SymbolString::symbolParse(mGameSettings->getInputCodeManager(), cmdList[i].binding,
                                    symbols, HelpContext, cmdSize, true, txtColor, keyColor);
 
          SymbolString keys(symbols);

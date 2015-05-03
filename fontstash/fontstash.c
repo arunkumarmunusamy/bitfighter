@@ -27,11 +27,7 @@
 #  define TNL_OS_MOBILE
 #endif
 
-#if defined(TNL_OS_MOBILE) || defined(BF_USE_GLES)
-#  include "SDL_opengles.h"
-#else
-#  include "SDL_opengl.h"
-#endif
+#include "glinc.h"
 
 /* @rlyeh: removed STB_TRUETYPE_IMPLENTATION. We link it externally */
 #include "stb_truetype.h"
@@ -690,7 +686,7 @@ void sth_dim_text(struct sth_stash* stash,
 		if (q.x1 > *maxx) *maxx = q.x1;
 		if (q.y1 < *miny) *miny = q.y1;
 		if (q.y0 > *maxy) *maxy = q.y0;
-	}
+	}  
 	if (floorf(x) > *maxx) *maxx = floorf(x);
 }
 
