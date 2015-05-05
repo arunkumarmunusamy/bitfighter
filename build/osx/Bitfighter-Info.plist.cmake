@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>${MACOSX_BUNDLE_EXECUTABLE}</string>
+	<key>CFBundleIconFile</key>
+	<string>Bitfighter.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.bitfighter.Bitfighter</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleLongVersionString</key>
+	<string>${BF_VERSION}</string>
+	<key>CFBundleName</key>
+	<string>${MACOSX_BUNDLE_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${BF_VERSION}</string>
+	<key>CFBundleVersion</key>
+	<string>${BF_BUILD_VERSION}</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>${MACOSX_DEPLOYMENT_TARGET}</string>
+	<key>LSMinimumSystemVersionByArchitecture</key>
+	<dict>
+		<key>x86_64</key>
+		<string>10.6.0</string>
+		<key>i386</key>
+		<string>10.4.0</string>
+		<key>ppc</key>
+		<string>10.4.0</string>
+	</dict>
+	<key>LSArchitecturePriority</key>
+	<array>
+		<string>x86_64</string>
+		<string>i386</string>
+		<string>ppc</string>
+	</array>
+	<key>SUPublicDSAKeyFile</key>
+	<string>dsa_pub.pem</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+</dict>
+</plist>
