@@ -46,24 +46,7 @@
 // backport player count stuff
 
 /*
-XXX need to document timers, new luavec stuff XXX
-
 /shutdown enhancements: on screen timer after msg dismissed, instant dismissal of local notice, notice in join menu, shutdown after level, auto shutdown when quitting and players connected
-
- */
-/* Fixes after 016
-<h2>New features</h2>
-<ul>
-<li>
-</ul>
-
-
-// Scripting nots
-bot:findItems --> findItems
-bot:findGlobalItems --> findItems
-
-printToOglConsole --> printToConsole
-include (replaces require)
 
 */
 
@@ -83,6 +66,8 @@ include (replaces require)
 
 #include "GameManager.h"
 
+#include "StackTracer.h"
+
 using namespace TNL;
 
 #ifndef ZAP_DEDICATED
@@ -97,15 +82,10 @@ using namespace TNL;
 #  include "Event.h"
 #  include "SDL.h"
 
-#  if defined(TNL_OS_MOBILE) || defined(BF_USE_GLES)
-#    include "SDL_opengles.h"
-#  else
-#    include "SDL_opengl.h"
-#  endif
-
 #  include "VideoSystem.h"
 #  include "ClientGame.h"
 #  include "FontManager.h"
+#  include "RenderManager.h"
 #endif
 
 #include "ServerGame.h"
@@ -188,43 +168,22 @@ void exitToOs()
 #endif
 
 
-// All levels loaded, we're ready to go
-void hostGame(ServerGame *serverGame)
-{
-   TNLAssert(serverGame, "Need a ServerGame to host, silly!");
-
-   if(!serverGame->startHosting())
-   {
-      abortHosting_noLevels(serverGame);
-      return;
-   }
-
 #ifndef ZAP_DEDICATED
-   const Vector<ClientGame *> *clientGames = GameManager::getClientGames();
 
-   for(S32 i = 0; i < clientGames->size(); i++)
-   {
-      clientGames->get(i)->getUIManager()->disableLevelLoadDisplay(true);
-      clientGames->get(i)->joinLocalGame(serverGame->getNetInterface());  // ...then we'll play, too!
-   }
-#endif
-}
-
-
-#ifndef ZAP_DEDICATED
+GL *mGL = NULL;
 
 // Clear screen -- force clear of "black bars" area to avoid flickering on some video cards
 static void clearScreen()
 {
-   bool scissorMode = glIsEnabled(GL_SCISSOR_TEST);
+   bool scissorMode = mGL->glIsEnabled(GLOPT::ScissorTest);
 
    if(scissorMode)
-      glDisable(GL_SCISSOR_TEST);
+      mGL->glDisable(GLOPT::ScissorTest);
 
-   glClear(GL_COLOR_BUFFER_BIT);
+   mGL->glClear(GLOPT::ColorBufferBit);
 
    if(scissorMode)
-      glEnable(GL_SCISSOR_TEST);
+      mGL->glEnable(GLOPT::ScissorTest);
 }
 
 
@@ -233,8 +192,8 @@ void display()
 {
    clearScreen();
 
-   glMatrixMode(GL_MODELVIEW);
-   glLoadIdentity();
+   mGL->glMatrixMode(GLOPT::Modelview);
+   mGL->glLoadIdentity();
 
    const Vector<ClientGame *> *clientGames = GameManager::getClientGames();
 
@@ -262,8 +221,6 @@ void display()
 #endif // ZAP_DEDICATED
 
 
-void shutdownBitfighter();    // Forward declaration
-
 // If the server game exists, and is shutting down, close any ClientGame connections we might have to it, then delete it.
 // If there are no client games, delete it and return to the OS.
 void checkIfServerGameIsShuttingDown(U32 timeDelta)
@@ -286,7 +243,7 @@ void checkIfServerGameIsShuttingDown(U32 timeDelta)
       else                                
 #endif
          // Either we have no clients, or this is a dedicated build so...
-         shutdownBitfighter();    // ...shut down the whole shebang, return to OS, never come back
+         GameManager::shutdownBitfighter();    // ...shut down the whole shebang, return to OS, never come back
    }
 }
 
@@ -311,7 +268,7 @@ void loadAnotherLevelOrStartHosting()
    }
 
    else if(GameManager::getHostingModePhase() == GameManager::DoneLoadingLevels)
-      hostGame(GameManager::getServerGame());
+      GameManager::hostGame();
 }
 
 
@@ -346,9 +303,11 @@ void idle()
 
    bool dedicated = GameManager::getServerGame() && GameManager::getServerGame()->isDedicated();
 
-   U32 maxFPS = dedicated ? settings->getIniSettings()->maxDedicatedFPS : settings->getIniSettings()->maxFPS;
-
-   if(deltaT >= S32(1000 / maxFPS))
+   U32 maxFPS = dedicated ? settings->getSetting<U32>(IniKey::MaxFpsServer) : 
+                            settings->getSetting<U32>(IniKey::MaxFpsClient);
+   
+   // If user specifies 0, run full-bore!
+   if(maxFPS == 0 || deltaT >= S32(1000 / maxFPS))
    {
       checkIfServerGameIsShuttingDown(U32(deltaT));
       GameManager::idle(U32(deltaT));
@@ -375,7 +334,7 @@ void idle()
       TNLAssert(clientGames->size() > 0, "Why are we here if there is no client game??");
 
       if(event.type == SDL_QUIT) // Handle quit here
-         shutdownBitfighter();
+         GameManager::shutdownBitfighter();
 
       // Pass the event to all clientGames
       for(S32 i = 0; i < clientGames->size(); i++)
@@ -404,154 +363,65 @@ void dedicatedServerLoop()
       idle();     // Idly!
 }
 
-////////////////////////////////////////
-////////////////////////////////////////
-
-// Include class here to avoid contaminating tnlLog with the filth that is oglConsole
-// If BF_NO_CONSOLE is defined, console output will be merged into normal stdout logging elsewhere
-class OglConsoleLogConsumer : public LogConsumer    // Dumps to oglConsole
-{
-private:
-   void writeString(const char *string) 
-   {
-      gConsole.output(string);
-   }
-};
-
 
 ////////////////////////////////////////
 ////////////////////////////////////////
 // Our logfiles
 StdoutLogConsumer gStdoutLog;          // Logs to OS console, when there is one
-#ifndef BF_NO_CONSOLE
-   OglConsoleLogConsumer gOglConsoleLog;  // Logs to our in-game console, when available
-#endif
 
 FileLogConsumer gMainLog;
 FileLogConsumer gServerLog;            // We'll apply a filter later on, in main()
 
+
 ////////////////////////////////////////
 ////////////////////////////////////////
-
-
-// Run when we're quitting the game, returning to the OS.  Saves settings and does some final cleanup to keep things orderly.
-// There are currently only 6 ways to get here (i.e. 6 legitimate ways to exit Bitfighter): 
-// 1) Hit escape during initial name entry screen
-// 2) Hit escape from the main menu
-// 3) Choose Quit from main menu
-// 4) Host a game with no levels as a dedicated server
-// 5) Admin issues a shutdown command to a remote dedicated server
-// 6) Click the X on the window to close the game window   <=== NOTE: This scenario fails for me when running a dedicated server on windows.
-// and one illigitimate way
-// 7) Lua panics!!
-void shutdownBitfighter()
-{
-   GameSettings *settings = NULL;
-
-   // Avoid this function being called twice when we exit via methods 1-4 above
-#ifndef ZAP_DEDICATED
-   if(GameManager::getClientGames()->size() == 0)
-#endif
-      if(GameManager::getServerGame())
-         exitToOs();
-
-// Grab a pointer to settings wherever we can.  Note that all Games (client or server) currently refer to the same settings object.
-#ifndef ZAP_DEDICATED
-   if(GameManager::getClientGames()->size() > 0)
-      settings = GameManager::getClientGames()->get(0)->getSettings();
-
-   GameManager::deleteClientGames();
-
-#endif
-
-   if(GameManager::getServerGame())
-   {
-      settings = GameManager::getServerGame()->getSettings();
-      GameManager::deleteServerGame();
-   }
-
-
-   TNLAssert(settings, "Should always have a value here!");
-
-   EventManager::shutdown();
-   LuaScriptRunner::shutdown();
-   SoundSystem::shutdown();
-
-   if(!settings->isDedicatedServer())
-   {
-#ifndef ZAP_DEDICATED
-      Joystick::shutdownJoystick();
-
-      // Save current window position if in windowed mode
-      if(settings->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode") == DISPLAY_MODE_WINDOWED)
-      {
-         settings->getIniSettings()->winXPos = VideoSystem::getWindowPositionX();
-         settings->getIniSettings()->winYPos = VideoSystem::getWindowPositionY();
-      }
-
-      SDL_QuitSubSystem(SDL_INIT_VIDEO);
-
-      FontManager::cleanup();
-#endif
-   }
-
-#ifndef BF_NO_CONSOLE
-   // Avoids annoying shutdown crashes when logging is still trying to output to oglconsole
-   gOglConsoleLog.setMsgTypes(LogConsumer::LogNone);
-#endif
-
-   settings->save();                                  // Write settings to bitfighter.ini
-
-   delete settings;
-
-   DisplayManager::cleanup();
-
-   NetClassRep::logBitUsage();
-   logprintf("Bye!");
-
-   exitToOs();    // Do not pass Go
-}
-
 
 void setupLogging(IniSettings *iniSettings)
 {
    //                           Logging type               Setting where whether we log this type is stored
-   gMainLog.setMsgType(LogConsumer::LogConnectionProtocol, iniSettings->logConnectionProtocol);
-   gMainLog.setMsgType(LogConsumer::LogNetConnection,      iniSettings->logNetConnection);
-   gMainLog.setMsgType(LogConsumer::LogEventConnection,    iniSettings->logEventConnection);
-   gMainLog.setMsgType(LogConsumer::LogGhostConnection,    iniSettings->logGhostConnection);
+   gMainLog.setMsgType(LogConsumer::LogConnectionProtocol, iniSettings->mSettings.getVal<YesNo>(IniKey::LogConnectionProtocol));
+   gMainLog.setMsgType(LogConsumer::LogNetConnection,      iniSettings->mSettings.getVal<YesNo>(IniKey::LogNetConnection));
+   gMainLog.setMsgType(LogConsumer::LogEventConnection,    iniSettings->mSettings.getVal<YesNo>(IniKey::LogEventConnection));
+   gMainLog.setMsgType(LogConsumer::LogGhostConnection,    iniSettings->mSettings.getVal<YesNo>(IniKey::LogGhostConnection));
 
-   gMainLog.setMsgType(LogConsumer::LogNetInterface,       iniSettings->logNetInterface);
-   gMainLog.setMsgType(LogConsumer::LogPlatform,           iniSettings->logPlatform);
-   gMainLog.setMsgType(LogConsumer::LogNetBase,            iniSettings->logNetBase);
-   gMainLog.setMsgType(LogConsumer::LogUDP,                iniSettings->logUDP);
+   gMainLog.setMsgType(LogConsumer::LogNetInterface,       iniSettings->mSettings.getVal<YesNo>(IniKey::LogNetInterface));
+   gMainLog.setMsgType(LogConsumer::LogPlatform,           iniSettings->mSettings.getVal<YesNo>(IniKey::LogPlatform));
+   gMainLog.setMsgType(LogConsumer::LogNetBase,            iniSettings->mSettings.getVal<YesNo>(IniKey::LogNetBase));
+   gMainLog.setMsgType(LogConsumer::LogUDP,                iniSettings->mSettings.getVal<YesNo>(IniKey::LogUDP));
 
-   gMainLog.setMsgType(LogConsumer::LogFatalError,         iniSettings->logFatalError); 
-   gMainLog.setMsgType(LogConsumer::LogError,              iniSettings->logError); 
-   gMainLog.setMsgType(LogConsumer::LogWarning,            iniSettings->logWarning); 
-   gMainLog.setMsgType(LogConsumer::ConfigurationError,    iniSettings->logConfigurationError);
-   gMainLog.setMsgType(LogConsumer::LogConnection,         iniSettings->logConnection); 
-   gMainLog.setMsgType(LogConsumer::LogLevelLoaded,        iniSettings->logLevelLoaded); 
-   gMainLog.setMsgType(LogConsumer::LogLuaObjectLifecycle, iniSettings->logLuaObjectLifecycle); 
-   gMainLog.setMsgType(LogConsumer::LuaLevelGenerator,     iniSettings->luaLevelGenerator); 
-   gMainLog.setMsgType(LogConsumer::LuaBotMessage,         iniSettings->luaBotMessage); 
-   gMainLog.setMsgType(LogConsumer::ServerFilter,          iniSettings->serverFilter); 
+   gMainLog.setMsgType(LogConsumer::LogFatalError,         iniSettings->mSettings.getVal<YesNo>(IniKey::LogFatalError)); 
+   gMainLog.setMsgType(LogConsumer::LogError,              iniSettings->mSettings.getVal<YesNo>(IniKey::LogError)); 
+   gMainLog.setMsgType(LogConsumer::LogWarning,            iniSettings->mSettings.getVal<YesNo>(IniKey::LogWarning)); 
+   gMainLog.setMsgType(LogConsumer::ConfigurationError,    iniSettings->mSettings.getVal<YesNo>(IniKey::LogConfigurationError));
+   gMainLog.setMsgType(LogConsumer::LogConnection,         iniSettings->mSettings.getVal<YesNo>(IniKey::LogConnection)); 
+
+   gMainLog.setMsgType(LogConsumer::LogLevelLoaded,        iniSettings->mSettings.getVal<YesNo>(IniKey::LogLevelLoaded)); 
+   gMainLog.setMsgType(LogConsumer::LogLevelError,         iniSettings->mSettings.getVal<YesNo>(IniKey::LogLevelError)); 
+   gMainLog.setMsgType(LogConsumer::LogLuaObjectLifecycle, iniSettings->mSettings.getVal<YesNo>(IniKey::LogLuaObjectLifecycle)); 
+   gMainLog.setMsgType(LogConsumer::LuaLevelGenerator,     iniSettings->mSettings.getVal<YesNo>(IniKey::LuaLevelGenerator)); 
+   gMainLog.setMsgType(LogConsumer::LuaBotMessage,         iniSettings->mSettings.getVal<YesNo>(IniKey::LuaBotMessage)); 
+   gMainLog.setMsgType(LogConsumer::ServerFilter,          iniSettings->mSettings.getVal<YesNo>(IniKey::ServerFilter)); 
 }
 
 
 void createClientGame(GameSettingsPtr settings)
 {
 #ifndef ZAP_DEDICATED
-   if(!settings->isDedicatedServer())                      // Create ClientGame object
+   if(!settings->isDedicatedServer())
    {
+      // Grab some values from the settings
+      U16    portNumber     = settings->getSetting<U16>(IniKey::ClientPortNumber);
+      string lastEditorName = settings->getSetting<string>(IniKey::LastEditorName);
+      string lastName       = settings->getSetting<string>(IniKey::LastName);
+
       // Create a new client, and let the system figure out IP address and assign a port
-      ClientGame *clientGame = new ClientGame(Address(IPProtocol, Address::Any, settings->getIniSettings()->clientPortNumber), 
-                                              settings, new UIManager());    // ClientGame destructor will clean up UIManager
+      // ClientGame destructor will clean up UIManager
+      ClientGame *clientGame = new ClientGame(Address(IPProtocol, Address::Any, portNumber), settings, new UIManager());    
 
        // Put any saved filename into the editor file entry thingy
-      clientGame->getUIManager()->getUI<LevelNameEntryUserInterface>()->setString(settings->getIniSettings()->lastEditorName);
+      clientGame->getUIManager()->getUI<LevelNameEntryUserInterface>()->setString(lastEditorName);
 
-      Game::seedRandomNumberGenerator(settings->getIniSettings()->mSettings.getVal<string>("LastName"));
+      Game::seedRandomNumberGenerator(lastName);
       clientGame->getClientInfo()->getId()->getRandom();
 
       GameManager::addClientGame(clientGame);
@@ -575,14 +445,14 @@ void createClientGame(GameSettingsPtr settings)
          //   gClientGame = gClientGame1;
          //}
          //gClientGame->getUIManager()->getUI<NameEntryUserInterface>()->activate();     <-- won't work no more!
-         Game::seedRandomNumberGenerator(settings->getIniSettings()->mSettings.getVal<string>("LastName"));
+         Game::seedRandomNumberGenerator(settings->getSetting<string>(IniKey::LastName));
       }
       else  // Skipping startup screen
       {
          const Vector<ClientGame *> *clientGames = GameManager::getClientGames();
          for(S32 i = 0; i < clientGames->size(); i++)
          {
-            clientGames->get(i)->getUIManager()->activate<MainMenuUserInterface>();
+            clientGames->get(i)->activateMainMenuUI();
             clientGames->get(i)->setReadyToConnectToMaster(true);
          }
 
@@ -605,18 +475,17 @@ void createClientGame(GameSettingsPtr settings)
 }
 
 
+// Specify which events each logfile will listen for
+S32 events = LogConsumer::AllErrorTypes | LogConsumer::LuaLevelGenerator | LogConsumer::LuaBotMessage | LogConsumer::LogConnection;
+
+
 void setupLogging(const string &logDir)
 {
-   // Specify which events each logfile will listen for
-   S32 events        = LogConsumer::AllErrorTypes | LogConsumer::LuaLevelGenerator | LogConsumer::LuaBotMessage | LogConsumer::LogConnection;
-   S32 consoleEvents = LogConsumer::AllErrorTypes | LogConsumer::LuaLevelGenerator | LogConsumer::LuaBotMessage | LogConsumer::ConsoleMsg;
-
    gMainLog.init(joindir(logDir, "bitfighter.log"), "w");
    //gMainLog.setMsgTypes(events);  ==> set from INI settings     
    gMainLog.logprintf("------ Bitfighter Log File ------");
 
 #ifndef BF_NO_CONSOLE
-   gOglConsoleLog.setMsgTypes(consoleEvents);   // writes to in-game console
    gStdoutLog.setMsgTypes(events);              // writes to stdout
 #else
    gStdoutLog.setMsgTypes(events | consoleEvents);              // writes to stdout
@@ -697,7 +566,7 @@ void checkOnlineUpdate(GameSettings *settings)
    // Windows only
 #ifdef USE_BFUP
    // Spawn external updater tool to check for new version of Bitfighter
-   if(settings->getIniSettings()->useUpdater)
+   if(settings->getSetting<YesNo>(IniKey::UseUpdater))
       launchWindowsUpdater(settings->getForceUpdate());
 #endif   // USE_BFUP
 
@@ -885,7 +754,7 @@ void removeFile(const string &offendingFile)
 void checkIfThisIsAnUpdate(GameSettings *settings, bool isStandalone)
 {
    // Previous version is what the INI currently says
-   U32 previousVersion = settings->getIniSettings()->version;
+   U32 previousVersion = settings->getSetting<U32>(IniKey::Version);
 
    // If we're at the same version as our INI, no need to update anything
    if(previousVersion >= BUILD_VERSION)
@@ -901,13 +770,13 @@ void checkIfThisIsAnUpdate(GameSettings *settings, bool isStandalone)
    // See version.h for short history of roughly what version corresponds to a game release
 
    // 016:
-   if(previousVersion < 1840 && settings->getIniSettings()->maxBots == 127)
-      settings->getIniSettings()->maxBots = 10;
+   if(previousVersion < 1840 && settings->getSetting<S32>(IniKey::MaxBots) == 127)
+      settings->setSetting(IniKey::MaxBots, 10);
 
    if(previousVersion < VERSION_016)
    {
       // Master server changed
-      settings->getIniSettings()->masterAddress = MASTER_SERVER_LIST_ADDRESS;
+      settings->setSetting(IniKey::MasterServerAddressList, MASTER_SERVER_LIST_ADDRESS);
 
       // We added editor plugins
       GameSettings::iniFile.addSection("EditorPlugins");
@@ -921,7 +790,7 @@ void checkIfThisIsAnUpdate(GameSettings *settings, bool isStandalone)
    {
       // Remove game.ogg  from music folder, if it exists...
       FolderManager *folderManager = settings->getFolderManager();
-      string offendingFile = joindir(folderManager->musicDir, "game.ogg");
+      string offendingFile = joindir(folderManager->getMusicDir(), "game.ogg");
       
       removeFile(offendingFile);
    }
@@ -930,7 +799,7 @@ void checkIfThisIsAnUpdate(GameSettings *settings, bool isStandalone)
    if(previousVersion < VERSION_018a)
    {
       // Fix a previous evil bug that hurt connection speed.  Reset it to 0 here
-      settings->getIniSettings()->connectionSpeed = 0;
+      settings->setSetting(IniKey::ConnectionSpeed, 0);
    }
 
    // 019:
@@ -943,7 +812,7 @@ void checkIfThisIsAnUpdate(GameSettings *settings, bool isStandalone)
       GameSettings::iniFile.SetValue("EditorPlugins", "Plugin1", "Ctrl+'|draw_stars.lua|Create polygon/star");
 
       // Add back linesmoothing option
-      settings->getIniSettings()->mSettings.setVal("LineSmoothing", Yes);
+      settings->setSetting(IniKey::LineSmoothing, Yes);
    }
 
    // 019a:
@@ -962,12 +831,30 @@ void checkIfThisIsAnUpdate(GameSettings *settings, bool isStandalone)
 
       // Remove item_select.lua plugin, it was superseded by filter.lua
       FolderManager *folderManager = settings->getFolderManager();
-      string offendingFile = joindir(folderManager->pluginDir, "item_select.lua");
+      string offendingFile = joindir(folderManager->getPluginDir(), "item_select.lua");
 
       removeFile(offendingFile);
    }
 
    // 019b, 019c, 019d, 019e - no major changes with preferences
+
+   // 019b: Nothing to update
+
+   // 020:
+   if(previousVersion < VERSION_019d)
+   {
+      // VerboseHelpMessages was removed
+      GameSettings::iniFile.deleteKey("Settings", "VerboseHelpMessages");
+
+      // Testing::OldGoalFlash --> Testing::GoalZoneFlashStyle
+      string val = GameSettings::iniFile.GetValueYN("Testing", "OldGoalFlash", Yes) ? "Original" : "Experimental";
+      GameSettings::iniFile.SetValue("Testing", "GoalZoneFlashStyle", val, true);
+
+      // We converted QueryServerSortAscending to YesNo from a 0/1 boolean setting.  Read the old
+      // value and write the updated version.
+      bool oldval = GameSettings::iniFile.GetValueB("Settings", "QueryServerSortAscending", true);
+      GameSettings::iniFile.setValueYN("Settings", "QueryServerSortAscending", oldval, false);
+   }
 
 
    // Now copy over resources to user's preference directory.  This will overwrite the previous
@@ -1061,6 +948,13 @@ static bool thisProgramHasCreatedConsoleWindow()
 }
 #endif
 
+
+#ifndef BF_NO_STACKTRACE
+// Get the StackTracer up and running, ready to handle all our crash tracing needs!
+StackTracer stackTracer;
+#endif
+
+
 ////////////////////////////////////////
 ////////////////////////////////////////
 // main()
@@ -1085,6 +979,30 @@ int main(int argc, char **argv)
 
 // Enable some heap checking stuff for Windows... slow... do not include in release version!!
 //_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF | _CRTDBG_CHECK_ALWAYS_DF );
+
+#ifdef TEST1  // #ifndef ZAP_DEDICATED
+   // Command line screenshot making from level, more work needed
+   if(argc >= 2 && argv[0] == "-makescreenshot")
+   {
+      const char* levelpath = argv[1];
+      if(argc >= 3) LevelDatabaseUploadThread::UploadScreenshotFilename = argv[2];
+
+      DisplayManager::initialize();
+      SDL_Init(0);
+      if(!VideoSystem::init())
+         return 1;  // error
+
+      VideoSystem::actualizeScreenMode(&gSettings, false, false);
+      FontManager::setFont(FontRoman);
+      GameManager::gameConsole->initialize();
+
+      ClientGame game(Address(), new UIManager());
+      game.getUIManager()->getUI<EditorUserInterface>()->setLevelFileName(levelpath);
+      game.getUIManager()->activate<EditorUserInterface>(false);
+      game.getUIManager()->getUI<EditorUserInterface>()->createNormalizedScreenshot(&game);
+      return 0;
+   }
+#endif
 
 
 #ifdef USE_EXCEPTION_BACKTRACE
@@ -1124,9 +1042,8 @@ int main(int argc, char **argv)
       // Set the default paths
       setDefaultPaths(argVector);
    }
-   //else
-   //   printf("Standalone run detected\n");
 
+   settings->setExecutablePath(string(argv[0]));
    settings->readCmdLineParams(argVector);      // Read cmd line params, needed to resolve folder locations
    settings->resolveDirs();                     // Figures out where all our folders are (except leveldir)
 
@@ -1134,30 +1051,36 @@ int main(int argc, char **argv)
 
    // Before we go any further, we should get our log files in order.  We know where they'll be, as the 
    // only way to specify a non-standard location is via the command line, which we've now read.
-   setupLogging(folderManager->logDir);
+   setupLogging(folderManager->getLogDir());
 
    InputCodeManager::initializeKeyNames();      // Used by loadSettingsFromINI()
 
    // Load our primary settings file
-   GameSettings::iniFile.SetPath(joindir(folderManager->iniDir, "bitfighter.ini"));
+   GameSettings::iniFile.SetPath(joindir(folderManager->getIniDir(), "bitfighter.ini"));
    loadSettingsFromINI(&GameSettings::iniFile, settings.get());
 
    // Load the user settings file
-   GameSettings::userPrefs.SetPath(joindir(folderManager->iniDir, "usersettings.ini"));
+   GameSettings::userPrefs.SetPath(joindir(folderManager->getIniDir(), "usersettings.ini"));
    IniSettings::loadUserSettingsFromINI(&GameSettings::userPrefs, settings.get());
 
    // Time to check if there is an online update (for any relevant platforms)
    if(!isStandalone)
       checkOnlineUpdate(settings.get());
 
+   GameManager gameManager;
+
    // Make any adjustments needed when we run for the first time after an upgrade
+   // Make sure logging is set up by the time we get here
    // Skip if this is the first run
    if(!isFirstLaunchEver)
       checkIfThisIsAnUpdate(settings.get(), isStandalone);
 
-   // Load Lua stuff
-   LuaScriptRunner::startLua(folderManager->luaDir);  // Create single "L" instance which all scripts will use
-   // TODO: What should we do if this fails?  Quit the game?
+   // Start Lua, or die trying
+   if(!LuaScriptRunner::startLua(folderManager->getLuaDir()))  // Create single "L" instance which all scripts will use
+   {
+      logprintf(LogConsumer::LogFatalError, "Could not start Lua interpreter; Exiting.");
+      exitToOs(1);
+   }
 
    setupLogging(settings->getIniSettings());    // Turns various logging options on and off
 
@@ -1165,9 +1088,10 @@ int main(int argc, char **argv)
 
    settings->runCmdLineDirectives();            // If we specified a directive on the cmd line, like -help, attend to that now
 
+
    // Even dedicated server needs sound these days
-   SoundSystem::init(settings->getIniSettings()->sfxSet, folderManager->sfxDir, 
-                     folderManager->musicDir, settings->getIniSettings()->getMusicVolLevel());  
+   SoundSystem::init(settings->getSetting<SfxSet>(IniKey::SFXSet), folderManager->getSfxDir(),
+                     folderManager->getMusicDir(), settings->getMusicVolume());
    
    if(settings->isDedicatedServer())
    {
@@ -1182,7 +1106,7 @@ int main(int argc, char **argv)
       LevelSourcePtr levelSource = LevelSourcePtr(settings->chooseLevelSource(serverGame));
 
       // Figure out what levels we'll be playing with, and start hosting  
-      initHosting(settings, levelSource, false, true, settings->getSpecified(HOST_ON_DEDICATED));
+      initHosting(settings, levelSource, false, true, settings->isCmdLineParamSpecified(HOST_ON_DEDICATED));
    }
    else
    {
@@ -1201,7 +1125,10 @@ int main(int argc, char **argv)
 #endif
 
       if(!VideoSystem::init())                // Initialize video and window system
-         shutdownBitfighter();
+         GameManager::shutdownBitfighter();
+
+      RenderManager::init();                  // Initialize the OpenGL abstraction layer
+      mGL = RenderManager::getGL();
 
 #if SDL_VERSION_ATLEAST(2,0,0)
       SDL_StartTextInput();
@@ -1220,7 +1147,7 @@ int main(int argc, char **argv)
       // of a string.  Which will crash if the fonts haven't been loaded, which happens as part of actualizeScreenMode.  So there.
       createClientGame(settings);         
 
-      gConsole.initialize();     // Initialize console *after* the screen mode has been actualized
+      gameManager.initialize();    // Initialize *after* the screen mode has been actualized
 
       // Fonts are initialized in VideoSystem::actualizeScreenMode because of OpenGL + texture loss/creation
       FontManager::setFont(FontRoman);     // Default font

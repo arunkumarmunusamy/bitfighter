@@ -8,6 +8,7 @@
 
 #include "UIAbstractInstructions.h"
 #include "Point.h"
+#include "SharedConstants.h"
 
 namespace Zap
 {
@@ -63,15 +64,19 @@ private:
    S32 col3;
    S32 col4;
 
-   bool usingArrowKeys();
+   bool usingArrowKeys() const;
 
-   void renderPage1();
-   void renderPage2();
-   void renderModulesPage();
-   void renderPageObjectDesc(U32 index);
-   void renderPageGameIndicators();
-   void renderPageCommands(U32 index, const char *msg = "");
-   void renderPageGameTypes();
+   void renderPage1() const;
+   void renderPage2() const;
+   void renderModulesPage() const;
+   void renderPageObjectDesc(U32 index) const;
+   void renderPageGameIndicators() const;
+   void renderPageCommands(U32 index, const char *msg = "") const;
+   void renderPageGameTypes() const;
+
+   void renderBadgeLine(S32 y, S32 textSize, MeritBadges badge, S32 radius, const char *name, const char *descr) const;
+   S32 renderBadges(S32 y, S32 textSize, S32 descSize)  const;
+
    void nextPage();
    void prevPage();
 
@@ -79,19 +84,18 @@ private:
 
    UI::SymbolStringSetCollection mSymbolSets;
    UI::SymbolStringSet mLoadoutInstructions, mPageHeaders;
-   UI::SymbolStringSet mGameTypeInstrs;
 
    void initNormalKeys_page1();
    void initPage2();
    void initPageHeaders();
-   void initGameTypesPage();
 
+   UI::SymbolStringSet getGameTypesPage() const;
 
 public:
-   explicit InstructionsUserInterface(ClientGame *game);      // Constructor
+   explicit InstructionsUserInterface(ClientGame *game, UIManager *uiManager);      // Constructor
    virtual ~InstructionsUserInterface();
 
-   void render();
+   void render() const;
 
    bool onKeyDown(InputCode inputCode);
 

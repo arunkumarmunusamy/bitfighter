@@ -16,7 +16,7 @@
 #include "../zap/LevelDatabase.h"
 
 
-#include "../boost/boost/shared_ptr.hpp"
+#include <boost/shared_ptr.hpp>
 
 using namespace DbWriter;
 
@@ -61,7 +61,7 @@ MasterServerConnection::MasterServerConnection()
    mLastActivityTime = 0;
    setIsConnectionToClient();
    setIsAdaptive();
-   isInGlobalChat = false;
+   isInLobbyChat = false;
    mAuthenticated = false;
    mIsDebugClient = false;
    mIsIgnoredFromList = false;
@@ -76,13 +76,13 @@ MasterServerConnection::MasterServerConnection()
 /// Destructor removes the connection from the doubly linked list of server connections
 MasterServerConnection::~MasterServerConnection()
 {
-   // If we're in global chat, announce to anyone else in global chat that we are leaving
-   if(isInGlobalChat)
+   // If we're in lobby chat, announce to anyone else in lobby chat that we are leaving
+   if(isInLobbyChat)
    {
       const Vector<MasterServerConnection *> *clientList = mMaster->getClientList();
 
       for(S32 i = 0; i < clientList->size(); i++)
-         if(clientList->get(i)->isInGlobalChat && clientList->get(i) != this)
+         if(clientList->get(i)->isInLobbyChat && clientList->get(i) != this)
             clientList->get(i)->m2cPlayerLeftGlobalChat(mPlayerOrServerName);
    }
 
@@ -143,11 +143,12 @@ MasterServerConnection::PHPBB3AuthenticationStatus MasterServerConnection::verif
    //          2 = alphanumeric (only allows alphanumeric characters in the username)
    //
    // We'll use level 1 for now, so users can put special characters in their username
-   authenticator.initialize(mMaster->getSetting<string>("MySqlAddress"), 
-                              mMaster->getSetting<string>("DbUsername"), 
-                              mMaster->getSetting<string>("DbPassword"), 
-                              mMaster->getSetting<string>("Phpbb3Database"), 
-                              mMaster->getSetting<string>("Phpbb3TablePrefix"), 
+   
+   authenticator.initialize(mMaster->getSetting<string>(Master::IniKey::MySqlAddress), 
+                              mMaster->getSetting<string>(Master::IniKey::DbUsername), 
+                              mMaster->getSetting<string>(Master::IniKey::DbPassword), 
+                              mMaster->getSetting<string>(Master::IniKey::Phpbb3Database), 
+                              mMaster->getSetting<string>(Master::IniKey::Phpbb3TablePrefix), 
                               1);
 
    S32 errorcode;
@@ -265,7 +266,7 @@ void MasterServerConnection::processAutentication(StringTableEntry newName, PHPB
 
       if(mPlayerOrServerName != newName)
       {
-         if(isInGlobalChat)         // Need to tell clients new name, in case of delayed authentication
+         if(isInLobbyChat)         // Need to tell clients new name, in case of delayed authentication
          {
             const Vector<MasterServerConnection *> *clientList = mMaster->getClientList();
 
@@ -273,7 +274,7 @@ void MasterServerConnection::processAutentication(StringTableEntry newName, PHPB
             {
                MasterServerConnection *client = clientList->get(i);
 
-               if(client != this && client->isInGlobalChat)
+               if(client != this && client->isInLobbyChat)
                {
                   client->m2cPlayerLeftGlobalChat(mPlayerOrServerName);
                   client->m2cPlayerJoinedGlobalChat(newName);
@@ -326,10 +327,14 @@ TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, c2mQueryServers, (U32 queryId
 {
    c2mQueryServersOption(queryId, false);
 }
+
+
 TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, c2mQueryHostServers, (U32 queryId))
 {
    c2mQueryServersOption(queryId, true);
 }
+
+
 void MasterServerConnection::c2mQueryServersOption(U32 queryId, bool hostonly)
 {
    Vector<IPAddress> addresses(IP_MESSAGE_ADDRESS_COUNT);
@@ -504,7 +509,7 @@ static bool listClient(MasterServerConnection *client)
 // This gets updated whenever we gain or lose a server, at most every 5 seconds (currently)
 void MasterServerConnection::writeClientServerList_JSON()
 {
-   string jsonfile = mMaster->getSetting<string>("JsonOutfile");
+   string jsonfile = mMaster->getSetting<string>(IniKey::JsonOutfile);
 
    // Don't write if we don't have a file
    if(jsonfile == "")
@@ -1487,7 +1492,13 @@ void MasterServerConnection::sendMotd()
    // Figure out which MOTD to send to client, based on game version (stored in mVersionString)
    string motdString = mMaster->getSettings()->getMotd(mClientBuild);
 
-   m2cSetMOTD(mMaster->getSetting<string>("ServerName"), motdString.c_str());     // Even level 0 clients can handle this
+   m2cSetMOTD(mMaster->getSetting<string>(IniKey::ServerName), motdString.c_str());     // Even level 0 clients can handle this
+}
+
+
+U32 MasterServerConnection::getClientBuild() const
+{
+   return mClientBuild;
 }
 
 
@@ -1679,6 +1690,7 @@ void MasterServerConnection::writeConnectAccept(BitStream *stream)
       stream->write(mClientId);
 }
 
+
 void MasterServerConnection::onConnectionEstablished()
 {
    Parent::onConnectionEstablished();
@@ -1686,8 +1698,8 @@ void MasterServerConnection::onConnectionEstablished()
    if(mConnectionType == MasterConnectionTypeClient)
    {
       // If client needs to upgrade, tell them
-      m2cSendUpdgradeStatus(mMaster->getSetting<U32>("LatestReleasedCSProtocol")   > mCSProtocolVersion || 
-                            mMaster->getSetting<U32>("LatestReleasedBuildVersion") > mClientBuild);
+      m2cSendUpdgradeStatus(mMaster->getSetting<U32>(IniKey::LatestReleasedCSProtocol)   > mCSProtocolVersion || 
+                            mMaster->getSetting<U32>(IniKey::LatestReleasedBuildVersion) > mClientBuild);
 
       // Send message of the day
       sendMotd();
@@ -1705,7 +1717,7 @@ TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, c2mJoinGlobalChat, ())
    const Vector<MasterServerConnection *> *clientList = mMaster->getClientList();
 
    for(S32 i = 0; i < clientList->size(); i++)
-      if(clientList->get(i) != this && clientList->get(i)->isInGlobalChat)
+      if(clientList->get(i) != this && clientList->get(i)->isInLobbyChat)
          names.push_back(clientList->get(i)->mPlayerOrServerName);
 
    if(names.size() > 0)
@@ -1714,32 +1726,26 @@ TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, c2mJoinGlobalChat, ())
    if(mIsIgnoredFromList)              // don't list name in lobby, too.
       return;
 
-   mLeaveGlobalChatTimer = 0;          // don't continue with delayed chat leave.
-   if(isInGlobalChat)                  // Already in Global Chat
+   mLeaveLobbyChatTimer = 0;           // don't continue with delayed chat leave.
+   if(isInLobbyChat)                   // Already in Lobby Chat
       return;
 
-   isInGlobalChat = true;
+   isInLobbyChat = true;
       
    for(S32 i = 0; i < clientList->size(); i++)
-      if(clientList->get(i) != this && clientList->get(i)->isInGlobalChat)
+      if(clientList->get(i) != this && clientList->get(i)->isInLobbyChat)
          clientList->get(i)->m2cPlayerJoinedGlobalChat(mPlayerOrServerName);
 }
 
 
 TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, c2mLeaveGlobalChat, ())
 {
-   if(!isInGlobalChat)  // was not in Global Chat
+   if(!isInLobbyChat)  // was not in Lobby Chat
       return;
 
    // using delayed leave, to avoid quickly join / leave problem.
-   mLeaveGlobalChatTimer = Platform::getRealMilliseconds() - 20; // "-20" make up for inaccurate getRealMilliseconds going backwards by 1 or 2 milliseconds.
+   mLeaveLobbyChatTimer = Platform::getRealMilliseconds() - 20; // "-20" make up for inaccurate getRealMilliseconds going backwards by 1 or 2 milliseconds.
    gLeaveChatTimerList.push_back(this);
-
-   //isInGlobalChat = false;
-   //Vector<MasterServerConnection *> *clientList = mMaster->getClientList();
-   //for(S32 i = 0; i < clientList->size(); i++)
-   //   if (clientList->get(i) != this && clientList->get(i)->isInGlobalChat)
-   //      clientList->get(i)->m2cPlayerLeftGlobalChat(mPlayerOrServerName);
 }
 
 
@@ -1936,12 +1942,16 @@ TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, s2mChangeName, (StringTableEn
       mMaster->writeJsonNow();  // update server name in ".json"
    }
 }
+
+
 TNL_IMPLEMENT_RPC_OVERRIDE(MasterServerConnection, s2mServerDescription, (StringTableEntry descr))
 {
    mServerDescr = descr;
 }
 
+
 TNL_IMPLEMENT_NETCONNECTION(MasterServerConnection, NetClassGroupMaster, true);
+
 
 Vector< GameConnectRequest* > MasterServerConnection::gConnectList;
 Vector<SafePtr<MasterServerConnection> > MasterServerConnection::gLeaveChatTimerList;

@@ -4,9 +4,15 @@
 //------------------------------------------------------------------------------
 
 #include "stringUtils.h"
+
 #include "tnlPlatform.h"   // For Vector, types, and dSprintf
 #include "tnlVector.h"
 #include "tnlLog.h"
+
+
+#if !defined(ZAP_DEDICATED) && !defined(BF_MASTER)
+#include "RenderUtils.h"
+#endif
 
 #include <stdio.h>
 #include <stdarg.h>        // For va_args
@@ -70,14 +76,33 @@ string extractDirectory(const string &path )
   return path.substr( 0, path.find_last_of( "\\/" )); // Paths should never end with the slash
 }
 
+
 string extractFilename(const string &path )
 {
   return path.substr( path.find_last_of( "\\/" ) + 1 );
 }
 
+
 string extractExtension(const string &path )
 {
   return path.substr( path.find_last_of( '.' ) + 1 );
+}
+
+
+// Need to handle both forward and backward slashes... will return pathname with trailing delimeter.
+// Can be replaced with extractDirectory?
+string getPathFromFilename(const string &filename)
+{
+   std::size_t pos1 = filename.rfind("/");
+   std::size_t pos2 = filename.rfind("\\");
+
+   if(pos1 == string::npos)
+      pos1 = 0;
+
+   if(pos2 == string::npos)
+      pos2 = 0;
+
+   return filename.substr(0, max(pos1, pos2) + 1);
 }
 
 
@@ -147,6 +172,17 @@ string ftos(F32 f)
 F64 stof(const string &s)
 {
    return atof(s.c_str());
+}
+
+
+// Split a multi-line string into a vector of lines
+void splitMultiLineString(const string &str, Vector<string> &strings)
+{
+   istringstream stream(str);
+   string line;
+
+   while(getline(stream, line)) 
+      strings.push_back(line);
 }
 
 
@@ -805,7 +841,7 @@ string chopComment(const string &line)
 
 string writeLevelString(const char *in)
 {
-   int c=0;
+   S32 c = 0;
    while(in[c] != 0 && in[c] != '\"' && in[c] != '#' && in[c] != ' ')
       c++;
    if(in[c] == 0 && c != 0)
@@ -838,28 +874,31 @@ bool writeFile(const string &path, const string &contents, bool append)
 }
 
 
-// Pass in a path, returns contents of file; if file does not exist, returns empty string
-const string readFile(const string &path)
+// Pass in a path, returns contents of file; if file does not exist, contents is set to an empty string
+// Function returns true if file exists, false if not
+bool readFile(const string &path, string &contents)
 {
    ifstream file(path.c_str(), ios_base::in | ios_base::binary);
 
    if(!file.is_open())
-      return "";
+   {
+      contents = "";
+      return false;
+   }
 
-   // make a string and resize it to hold the file contents
-   string result;
+   // Resize the string to hold the file contents
    file.seekg(0, ios::end);
-   result.resize((string::size_type)file.tellg());
+   contents.resize((string::size_type)file.tellg());
    file.seekg(0, ios::beg);
 
-   file.read(&result[0], result.size());
+   file.read(&contents[0], contents.size());
    file.close();
 
    // Remove the UTF-8 BOM if it exists
    // These are the first three bytes:  EF BB BF
-   trim_left_in_place(result, "\357\273\277");
+   trim_left_in_place(contents, "\357\273\277");
 
-   return result;
+   return true;
 }
 
 
@@ -904,40 +943,6 @@ bool stringContainsAllTheSameCharacter(const string &str)
 }
 
 
-// Convert a string value to our sfxSets enum
-inline string displayModeToString(DisplayMode mode)
-{
-   if(mode == DISPLAY_MODE_FULL_SCREEN_STRETCHED)
-      return "Fullscreen-Stretch";
-   if(mode == DISPLAY_MODE_FULL_SCREEN_UNSTRETCHED)
-      return "Fullscreen";
-   
-   return "Window";
-}
-
-
-inline string colorEntryModeToString(ColorEntryMode colorEntryMode)
-{
-   if(colorEntryMode == ColorEntryModeHex)
-      return "RGBHEX";
-
-   if(colorEntryMode == ColorEntryMode255)
-      return "RGB255";
-
-   return "RGB100";
-}
-
-
-// Convert various things to strings -- needed by settings (which requires a consistent naming schema);
-// used elsewhere
-string toString(const string &val)        { return val;                                          }
-string toString(S32 val)                  { return itos(val);                                    }
-string toString(YesNo yesNo)              { return yesNo  == Yes      ? "Yes" :      "No";       }
-string toString(RelAbs relAbs)            { return relAbs == Relative ? "Relative" : "Absolute"; }
-string toString(DisplayMode displayMode)  { return displayModeToString(displayMode);             }
-string toString(ColorEntryMode colorMode) { return colorEntryModeToString(colorMode);            }
-
-
 bool isPrintable(char c)
 {
    return c >= 32 && c <= 126;
@@ -959,6 +964,81 @@ bool isHex(const string &str)
 
    return true;
 }
+
+
+// Helper functions to customize behavior of wrapString to match one of the sigs below
+static F32 getCharCount(const string &chunk, S32 dummy)    { return (F32)chunk.size(); }
+#if !defined(ZAP_DEDICATED) && !defined(BF_MASTER)
+static F32 getLineWidth(const string &chunk, S32 fontSize) { return RenderUtils::getStringWidth((F32)fontSize, chunk.c_str()); }
+#endif
+
+// Pass NO_AUTO_WRAP for wrapWidth to disable width-based wrapping
+Vector<string> doWrapString(const string &str, S32 wrapWidth, F32(*widthCalculator)(const string &, S32), 
+                            S32 fontSize, const string indentPrefix)
+{
+   TNLAssert(wrapWidth == NO_AUTO_WRAP || wrapWidth > 0, "Invalid wrapWidth!");
+
+   Vector<string> wrappedLines;
+
+   if(str == "")
+      return wrappedLines;
+
+   S32 indent = 0;
+   string prefix = "";
+
+   S32 start = 0;
+   S32 potentialBreakPoint = start;
+
+   for(U32 i = 0; i < str.length(); i++)
+   {
+      if(str[i] == '\n')
+      {
+         wrappedLines.push_back((wrappedLines.size() > 0 ? indentPrefix : "") + str.substr(start, i - start));
+         start = i + 1;
+         potentialBreakPoint = start + 1;
+      }
+
+      else if(str[i] == ' ')
+         potentialBreakPoint = i;
+
+      else if(wrapWidth != NO_AUTO_WRAP && widthCalculator(str.substr(start, i - start + 1).c_str(), fontSize) > wrapWidth - (wrappedLines.size() > 0 ? indent : 0))
+      {
+         if(potentialBreakPoint == start)    // No breakpoints were found before string grew too long... will just break here
+         {
+            wrappedLines.push_back((wrappedLines.size() > 0 ? indentPrefix : "") + str.substr(start, i - start));
+            start = i;
+            potentialBreakPoint = start;
+         }
+         else
+         {
+            wrappedLines.push_back((wrappedLines.size() > 0 ? indentPrefix : "") + str.substr(start, potentialBreakPoint - start));
+            potentialBreakPoint++;
+            start = potentialBreakPoint;
+         }
+      }
+   }
+
+   if(start != (S32)str.length())
+      wrappedLines.push_back((wrappedLines.size() > 0 ? indentPrefix : "") + str.substr(start));
+
+   return wrappedLines;
+}
+
+
+// Wrap strings based on char count
+Vector<string> wrapString(const string &chunk, S32 charCount, const string &indentPrefix)
+{
+   return doWrapString(chunk, charCount, &getCharCount, 0, indentPrefix);
+}
+
+#if !defined(ZAP_DEDICATED) && !defined(BF_MASTER)
+// Wrap strings based on rendered string width
+Vector<string> wrapString(const string &chunk, S32 lineWidth, S32 fontSize, const string &indentPrefix)
+{
+   return doWrapString(chunk, lineWidth, &getLineWidth, fontSize, indentPrefix);
+}
+#endif
+
 
 };
 

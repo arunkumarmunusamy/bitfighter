@@ -7,12 +7,12 @@
 #define _UI_MANAGER_H_
 
 #include "SoundEffect.h"
+#include "RenderManager.h"
 
 #include "SoundSystemEnums.h"
 #include "SparkTypesEnum.h"
 #include "PlayerActionEnum.h"
 
-#include "game.h"
 #include "HelpItemManager.h"     // For HelpItem def
 #include "LoadoutTracker.h"
 
@@ -44,7 +44,7 @@ class ClientGame;
 class UserInterface;
 class GameSettings;
 
-class UIManager
+class UIManager: RenderManager
 {
 public:
    static const S32 MessageBoxWrapWidth;
@@ -81,9 +81,9 @@ public:
       T *ui = static_cast<T *>(mUis[typeinfo]);
 
       // Lazily initialize if UI has not yet been instantiated; store for later use
-      if(!ui)  
+      if(!ui)
       {
-         ui = new T(mGame);
+         ui = new T(mGame, this);
          mUis[typeinfo] = ui;
       }
 
@@ -168,7 +168,10 @@ public:
    void displayMessage(const Color &msgColor, const char *format, ...);
 
    void onGameStarting();
-   void onGameOver();
+   void onGameOver();                  // Scoreboard display begins
+   void onGameReallyAndTrulyOver();    // After scoreboard display is finished
+
+   void updateLeadingPlayerAndScore();
 
    // Sounds and music
    SFXHandle playSoundEffect(U32 profileIndex, const Point &position) const;
@@ -188,10 +191,10 @@ public:
    void setHighScores(const Vector<StringTableEntry> &groupNames, const Vector<string> &names, const Vector<string> &scores);
 
    // ChatUI:
-   void gotGlobalChatMessage(const string &from, const string &message, bool isPrivate, bool isSystem, bool fromSelf);
-   void setPlayersInGlobalChat(const Vector<StringTableEntry> &playerNicks);
-   void playerJoinedGlobalChat(const StringTableEntry &playerNick);
-   void playerLeftGlobalChat  (const StringTableEntry &playerNick);
+   void gotLobbyChatMessage(const string &from, const string &message, bool isPrivate, bool isSystem, bool fromSelf);
+   void setPlayersInLobbyChat(const Vector<StringTableEntry> &playerNicks);
+   void playerJoinedLobbyChat(const StringTableEntry &playerNick);
+   void playerLeftLobbyChat(const StringTableEntry &playerNick);
 
    // QueryServersUI:
    void gotServerListFromMaster(const Vector<ServerAddr> &serverList);
@@ -212,7 +215,7 @@ public:
    void gotPasswordOrPermissionsReply(const ClientGame *game, const char *message);
 
    // MainMenuUi
-   void setMOTD(const char *motd);
+   void setMOTD(const string &motd);
    void setNeedToUpgrade(bool needToUpgrade);
 
    // PlayerUI
@@ -233,7 +236,8 @@ public:
    void emitBlast(const Point &pos, U32 size);
    void emitBurst(const Point &pos, const Point &scale, const Color &color1, const Color &color2);
    void emitDebrisChunk(const Vector<Point> &points, const Color &color, const Point &pos, const Point &vel, S32 ttl, F32 angle, F32 rotation);
-   void emitTextEffect(const string &text, const Color &color, const Point &pos);
+   void emitTextEffect(const string &text, const Color &color, const Point &pos, bool relative);
+   void emitDelayedTextEffect(U32 delay, const string &text, const Color &color, const Point &pos, bool relative);
    void emitSpark(const Point &pos, const Point &vel, const Color &color, S32 ttl, UI::SparkType sparkType);
    void emitExplosion(const Point &pos, F32 size, const Color *colorArray, U32 numColors);
    void emitTeleportInEffect(const Point &pos, U32 type);
@@ -268,7 +272,6 @@ public:
 
    // EditorUI
    void readRobotLine(const string &robotLine);
-   void markEditorLevelPermanentlyDirty();
 };
 
 

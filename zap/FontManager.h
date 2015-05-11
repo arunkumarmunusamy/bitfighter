@@ -7,13 +7,10 @@
 #define _FONT_MANAGER_H_
 
 #include "tnlTypes.h"
+#include "freeglut_stroke.h"   // Our stroke font handler
 
 #include "FontContextEnum.h"
-#include "freeglut_stroke.h"     // Our stroke font handler -- include here to resolve namespace grief
-
-extern "C" { 
-#  include "../fontstash/fontstash.h" 
-}
+#include "RenderManager.h"
 
 #include <string>
 
@@ -28,7 +25,7 @@ namespace Zap
 class BfFont;
 class GameSettings;
 
-class FontManager 
+class FontManager: RenderManager
 {
 
 private:
@@ -37,11 +34,12 @@ private:
 
    static BfFont *getFont(FontId currentFontId);
 
-   static S32 getStrokeFontStringLength(const SFG_StrokeFont *font, const char* string);
-   static S32 getTtfFontStringLength(BfFont *font, const char* string);
+   static F32 getStrokeFontStringLength(const SFG_StrokeFont *font, const char* string);
+   static F32 getTtfFontStringLength(BfFont *font, const char* string);
 
 public:
-   FontManager();    // Constructor
+   FontManager();          // Constructor
+   virtual ~FontManager(); // Destructor
 
    static void initialize(GameSettings *settings, bool useExternalFonts = true);
    static void reinitialize(GameSettings *settings);
@@ -52,7 +50,7 @@ public:
    static void drawTTFString(BfFont *font, const char *string, F32 size);
    static void drawStrokeCharacter(const SFG_StrokeFont *font, S32 character);
 
-   static S32 getStringLength(const char* string);
+   static F32 getStringLength(const char* string);
 
    static void renderString(F32 size, const char *string);
 

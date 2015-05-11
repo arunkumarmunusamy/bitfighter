@@ -15,14 +15,6 @@
 #include "VideoSystem.h"   // For setting screen geom vars
 #include "stringUtils.h"
 
-#if defined(TNL_OS_MOBILE) || defined(BF_USE_GLES)
-#  include "SDL_opengles.h"
-   // Needed for GLES compatibility
-#  define glOrtho glOrthof
-#else
-#  include "SDL_opengl.h"
-#endif
-
 #include "zlib.h"
 
 using namespace std;
@@ -48,20 +40,20 @@ void ScreenShooter::resizeViewportToCanvas(UIManager *uiManager)
    S32 width = DisplayManager::getScreenInfo()->getGameCanvasWidth();
    S32 height = DisplayManager::getScreenInfo()->getGameCanvasHeight();
 
-   glViewport(0, 0, width, height);
+   mGL->glViewport(0, 0, width, height);
 
-   glMatrixMode(GL_PROJECTION);
-   glLoadIdentity();
+   mGL->glMatrixMode(GLOPT::Projection);
+   mGL->glLoadIdentity();
 
-   glOrtho(0, width, height, 0, 0, 1);
+   mGL->glOrtho(0, width, height, 0, 0, 1);
 
-   glMatrixMode(GL_MODELVIEW);
-   glLoadIdentity();
+   mGL->glMatrixMode(GLOPT::Modelview);
+   mGL->glLoadIdentity();
 
-   glScissor(0, 0, width, height);
+   mGL->glScissor(0, 0, width, height);
 
    // Now render a frame to draw our new viewport to the back buffer
-   glClear(GL_COLOR_BUFFER_BIT);   // Not sure why this is needed
+   mGL->glClear(GLOPT::ColorBufferBit);   // Not sure why this is needed
    uiManager->renderCurrent();
 }
 
@@ -69,7 +61,7 @@ void ScreenShooter::resizeViewportToCanvas(UIManager *uiManager)
 // Stolen from VideoSystem::actualizeScreenMode()
 void ScreenShooter::restoreViewportToWindow(GameSettings *settings)
 {
-   DisplayMode displayMode = settings->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode");
+   DisplayMode displayMode = settings->getSetting<DisplayMode>(IniKey::WindowMode);
 
    // Set up video/window flags amd parameters and get ready to change the window
    S32 sdlWindowWidth, sdlWindowHeight;
@@ -77,26 +69,26 @@ void ScreenShooter::restoreViewportToWindow(GameSettings *settings)
 
    VideoSystem::getWindowParameters(settings, displayMode, sdlWindowWidth, sdlWindowHeight, orthoLeft, orthoRight, orthoTop, orthoBottom);
 
-   glViewport(0, 0, sdlWindowWidth, sdlWindowHeight);
+   mGL->glViewport(0, 0, sdlWindowWidth, sdlWindowHeight);
 
-   glMatrixMode(GL_PROJECTION);
-   glLoadIdentity();
+   mGL->glMatrixMode(GLOPT::Projection);
+   mGL->glLoadIdentity();
 
-   glOrtho(orthoLeft, orthoRight, orthoBottom, orthoTop, 0, 1);
+   mGL->glOrtho(orthoLeft, orthoRight, orthoBottom, orthoTop, 0, 1);
 
-   glMatrixMode(GL_MODELVIEW);
-   glLoadIdentity();
+   mGL->glMatrixMode(GLOPT::Modelview);
+   mGL->glLoadIdentity();
 
    // Now scissor
    if(displayMode == DISPLAY_MODE_FULL_SCREEN_UNSTRETCHED)
    {
-      glScissor(DisplayManager::getScreenInfo()->getHorizPhysicalMargin(), // x
+      mGL->glScissor(DisplayManager::getScreenInfo()->getHorizPhysicalMargin(), // x
             DisplayManager::getScreenInfo()->getVertPhysicalMargin(),      // y
             DisplayManager::getScreenInfo()->getDrawAreaWidth(),           // width
             DisplayManager::getScreenInfo()->getDrawAreaHeight());         // height
    }
    else
-      glScissor(0, 0, DisplayManager::getScreenInfo()->getWindowWidth(), DisplayManager::getScreenInfo()->getWindowHeight());
+      mGL->glScissor(0, 0, DisplayManager::getScreenInfo()->getWindowWidth(), DisplayManager::getScreenInfo()->getWindowHeight());
 }
 
 
@@ -105,7 +97,7 @@ void ScreenShooter::restoreViewportToWindow(GameSettings *settings)
 // Much was copied directly.
 void ScreenShooter::saveScreenshot(UIManager *uiManager, GameSettings *settings, string filename)
 {
-   string folder = settings->getFolderManager()->screenshotDir;
+   string folder = settings->getFolderManager()->getScreenshotDir();
 
    // Let's find a filename to use
    makeSureFolderExists(folder);
@@ -124,9 +116,7 @@ void ScreenShooter::saveScreenshot(UIManager *uiManager, GameSettings *settings,
       }
    }
    else
-   {
       fullFilename = joindir(folder, filename + ".png");
-   }
 
    // We default to resizing the opengl viewport to the standard canvas size, unless we're
    // in the editor or our window is smaller than the canvas size
@@ -144,31 +134,31 @@ void ScreenShooter::saveScreenshot(UIManager *uiManager, GameSettings *settings,
    // If we're resizing, use the default canvas size
    if(doResize)
    {
-      width = DisplayManager::getScreenInfo()->getGameCanvasWidth();
+      width  = DisplayManager::getScreenInfo()->getGameCanvasWidth();
       height = DisplayManager::getScreenInfo()->getGameCanvasHeight();
    }
    // Otherwise just take the window size
    else
    {
-      width = DisplayManager::getScreenInfo()->getWindowWidth();
+      width  = DisplayManager::getScreenInfo()->getWindowWidth();
       height = DisplayManager::getScreenInfo()->getWindowHeight();
    }
 
-   // Allocate buffer
-   GLubyte *screenBuffer = new GLubyte[BytesPerPixel * width * height];  // Glubyte * 3 = 24 bits
+   // Allocate buffer  GLubyte == U8
+   U8 *screenBuffer = new U8[BytesPerPixel * width * height];  // Glubyte * 3 = 24 bits
    png_bytep *rows = new png_bytep[height];
 
    // Set alignment at smallest for compatibility
-   glPixelStorei(GL_PACK_ALIGNMENT, 1);
+   mGL->glPixelStore(GLOPT::PackAlignment, 1);
 
    // Grab the front buffer with the new viewport
 #ifndef BF_USE_GLES
    // GLES doesn't need this?
-   glReadBuffer(GL_BACK);
+   mGL->glReadBuffer(GLOPT::Back);
 #endif
 
    // Read pixels from buffer - slow operation
-   glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, screenBuffer);
+   mGL->glReadPixels(0, 0, width, height, GLOPT::Rgb, GLOPT::UnsignedByte, screenBuffer);
 
    // Change opengl viewport back to what it was
    if(doResize)

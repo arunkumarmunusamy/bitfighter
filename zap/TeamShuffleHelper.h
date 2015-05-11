@@ -43,12 +43,12 @@ private:
    void calculateRenderSizes();
 
 public:
-   explicit TeamShuffleHelper();             // Constructor
+   TeamShuffleHelper();             // Constructor
    virtual ~TeamShuffleHelper();
 
    HelperMenuType getType();
 
-   void render();                
+   void render() const;                
    void onActivated();  
 
    bool processInputCode(InputCode inputCode);   

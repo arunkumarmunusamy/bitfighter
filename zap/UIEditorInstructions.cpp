@@ -8,20 +8,19 @@
 #include "UIManager.h"
 #include "UIEditor.h"         // For PluginInfo def
 
-#include "ClientGame.h"       // For usage with getGame()
-#include "barrier.h"     
 #include "BotNavMeshZone.h"   // For Border class def
-#include "gameObjectRender.h"
+#include "ClientGame.h"       // For usage with getGame()
 #include "DisplayManager.h"
-#include "VertexStylesEnum.h"
 #include "FontManager.h"
+#include "GameObjectRender.h"
+#include "VertexStylesEnum.h"
+#include "WallItem.h"     
 
 #include "Colors.h"
 #include "Intervals.h"
 
 #include "GeomUtils.h"        // For polygon triangulation
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 #include "stringUtils.h"
 
 #include <cmath>
@@ -29,16 +28,16 @@
 
 namespace Zap
 {
-
+   
 using UI::SymbolString;
 using UI::SymbolStringSet;
 
 // Constructor
-EditorInstructionsUserInterface::EditorInstructionsUserInterface(ClientGame *game) : Parent(game),
-                                                                                     mAnimTimer(ONE_SECOND),
-                                                                                     mConsoleInstructions(10)
+EditorInstructionsUserInterface::EditorInstructionsUserInterface(ClientGame *game, UIManager *uiManager) :
+   Parent(game, uiManager),
+   mAnimTimer(ONE_SECOND),
+   mConsoleInstructions(10)
 {
-   GameSettings *settings = getGame()->getSettings();
    mCurPage = 0;
    mAnimStage = 0;
 
@@ -138,17 +137,23 @@ EditorInstructionsUserInterface::EditorInstructionsUserInterface(ClientGame *gam
    };
 
 
-   pack(keysInstrLeft1,  keysBindingsLeft1, 
-        controls1Left, ARRAYSIZE(controls1Left), settings);
-
-   pack(keysInstrRight1, keysBindingsRight1, 
-        controls1Right, ARRAYSIZE(controls1Right), settings);
-
-   pack(keysInstrLeft2,  keysBindingsLeft2, 
-        controls2Left, ARRAYSIZE(controls2Left), settings);
+   ControlStringsEditor controls2Right[] = {
+      { "HEADER", "Object IDs" },
+      { "Edit Object ID",            "[[#]] or [[!]]" },
+      { "Toggle display of all IDs", "[[Ctrl+#]]" }
+   };
 
 
-   S32 centeringOffset = getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;
+
+   pack(keysInstrLeft1,  keysBindingsLeft1, controls1Left, ARRAYSIZE(controls1Left));
+
+   pack(keysInstrRight1, keysBindingsRight1, controls1Right, ARRAYSIZE(controls1Right));
+
+   pack(keysInstrLeft2,  keysBindingsLeft2,  controls2Left,  ARRAYSIZE(controls2Left));
+   pack(keysInstrRight2, keysBindingsRight2, controls2Right, ARRAYSIZE(controls2Right));
+
+
+   S32 centeringOffset = RenderUtils::getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;
 
    // Use default width here as the editor could be using a different canvas size
    S32 screenWidth = DisplayManager::getScreenInfo()->getDefaultCanvasWidth();
@@ -176,17 +181,15 @@ EditorInstructionsUserInterface::EditorInstructionsUserInterface(ClientGame *gam
       { "Team Editor",        "[[TeamEditor]]" }
    };
 
-   pack(mSpecialKeysInstrLeft,  mSpecialKeysBindingsLeft, 
-   helpBindLeft, ARRAYSIZE(helpBindLeft), settings);
+   pack(mSpecialKeysInstrLeft,  mSpecialKeysBindingsLeft, helpBindLeft, ARRAYSIZE(helpBindLeft));
    
    ControlStringsEditor helpBindRight[] = 
    {
       { "Game Params Editor", "[[GameParameterEditor]]" },
-      { "Universal Chat",     "[[OutOfGameChat]]"       }
+      { "Lobby Chat",     "[[OutOfGameChat]]"       }
    };
 
-   pack(mSpecialKeysInstrRight, mSpecialKeysBindingsRight, 
-        helpBindRight, ARRAYSIZE(helpBindRight), settings);
+   pack(mSpecialKeysInstrRight, mSpecialKeysBindingsRight, helpBindRight, ARRAYSIZE(helpBindRight));
 
 
    ControlStringsEditor wallInstructions[] =
@@ -199,10 +202,10 @@ EditorInstructionsUserInterface::EditorInstructionsUserInterface(ClientGame *gam
       { "[[BULLET]] Change wall thickness with [[+]] & [[-]] (use [[Shift]] for smaller changes)", "" }
    };
 
-   pack(mWallInstr, mWallBindings, wallInstructions, ARRAYSIZE(wallInstructions), settings);
+   pack(mWallInstr, mWallBindings, wallInstructions, ARRAYSIZE(wallInstructions));
 
    symbols.clear();
-   SymbolString::symbolParse(settings->getInputCodeManager(), "Open the console by pressing [[/]]", 
+   SymbolString::symbolParse(mGameSettings->getInputCodeManager(), "Open the console by pressing [[/]]",
                              symbols, HelpContext, FontSize, true, &Colors::green, keyColor);
 
    mConsoleInstructions.add(SymbolString(symbols));
@@ -225,19 +228,19 @@ EditorInstructionsUserInterface::EditorInstructionsUserInterface(ClientGame *gam
       UI::SymbolStringSet pluginSymbolSet(10);
 
       symbols.clear();
-      SymbolString::symbolParse(settings->getInputCodeManager(), "Plugins are scripts that can manipuate items in the editor.",
+      SymbolString::symbolParse(mGameSettings->getInputCodeManager(), "Plugins are scripts that can manipuate items in the editor.",
                                 symbols, HelpContext, FontSize, true, &Colors::green, keyColor);
       pluginSymbolSet.add(SymbolString(symbols));
 
       symbols.clear();
-      SymbolString::symbolParse(settings->getInputCodeManager(), "See the Bitfighter wiki for info on creating your own.",
+      SymbolString::symbolParse(mGameSettings->getInputCodeManager(), "See the Bitfighter wiki for info on creating your own.",
                                 symbols, HelpContext, FontSize, true, &Colors::green, keyColor);
       pluginSymbolSet.add(SymbolString(symbols));
 
       // Using TAB_STOP:0 below will cause the text and the horiz. line to be printed in the same space, creating a underline effect
       symbols.clear();
       symbols.push_back(SymbolString::getHorizLine(735, FontSize, FontSize + 4, &Colors::gray70));
-      SymbolString::symbolParse(settings->getInputCodeManager(), "[[TAB_STOP:0]]Key" + tabstr + "Description",
+      SymbolString::symbolParse(mGameSettings->getInputCodeManager(), "[[TAB_STOP:0]]Key" + tabstr + "Description",
                                 symbols, HelpContext, FontSize, true, &Colors::yellow, keyColor);
       pluginSymbolSet.add(SymbolString(symbols));
 
@@ -256,7 +259,7 @@ EditorInstructionsUserInterface::EditorInstructionsUserInterface(ClientGame *gam
          string instr = pluginInfos->get(j).description;
 
          symbols.clear();
-         SymbolString::symbolParse(settings->getInputCodeManager(), key + tabstr + instr,
+         SymbolString::symbolParse(mGameSettings->getInputCodeManager(), key + tabstr + instr,
                                    symbols, HelpContext, FontSize, txtColor, keyColor);
          pluginSymbolSet.add(SymbolString(symbols));
       }
@@ -289,13 +292,13 @@ void EditorInstructionsUserInterface::onActivate()
 }
 
 
-S32 EditorInstructionsUserInterface::getPageCount()
+S32 EditorInstructionsUserInterface::getPageCount() const
 {
    return 4 + mPluginPageCount;
 }
 
 
-void EditorInstructionsUserInterface::render()
+void EditorInstructionsUserInterface::render() const
 {
    FontManager::pushFontContext(HelpContext);
 
@@ -323,7 +326,7 @@ void EditorInstructionsUserInterface::render()
 
 
 // This has become rather ugly and inelegant.  But you shuold see UIInstructions.cpp!!!
-void EditorInstructionsUserInterface::renderPageCommands(S32 page)
+void EditorInstructionsUserInterface::renderPageCommands(S32 page) const
 {
    S32 y = 60;             // Is 65 in UIInstructions::render()...
 
@@ -339,15 +342,15 @@ void EditorInstructionsUserInterface::renderPageCommands(S32 page)
    }
 
    y = 486;
-   glColor(secColor);
-   drawCenteredString(y, 20, "These special keys are also usually active:");
+   mGL->glColor(secColor);
+   RenderUtils::drawCenteredString(y, 20, "These special keys are also usually active:");
 
    y += 45;
 
    mSpecialKeysInstrLeft.render (mCol1, y, UI::AlignmentLeft);
    mSpecialKeysInstrRight.render(mCol3, y, UI::AlignmentLeft);
 
-   S32 centeringOffset = getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;
+   S32 centeringOffset = RenderUtils::getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;
 
    mSpecialKeysBindingsLeft.render (mCol2 + centeringOffset, y, UI::AlignmentCenter);
    mSpecialKeysBindingsRight.render(mCol4 + centeringOffset, y, UI::AlignmentCenter);
@@ -355,7 +358,7 @@ void EditorInstructionsUserInterface::renderPageCommands(S32 page)
 
 
 // Draw animated creation of walls
-void EditorInstructionsUserInterface::renderPageWalls()
+void EditorInstructionsUserInterface::renderPageWalls() const
 {
    //drawStringf(400, 100, 25, "%d", mAnimStage);     // Useful to have around when things go wrong!
 
@@ -420,39 +423,35 @@ void EditorInstructionsUserInterface::renderPageWalls()
       Vector<Point> extendedEndPoints;
       constructBarrierEndPoints(&points, width, extendedEndPoints);
 
-       Vector<DatabaseObject *> wallSegments;      
+       Vector<const WallSegment *> wallSegments;      
 
       // Create a series of WallSegments, each representing a sequential pair of vertices on our wall
       for(S32 i = 0; i < extendedEndPoints.size(); i += 2)
       {
          // Create a new segment, and add it to the list.  The WallSegment constructor will add it to the specified database.
-         WallSegment *newSegment = new WallSegment(mWallSegmentManager.getWallSegmentDatabase(), 
-                                                   extendedEndPoints[i], extendedEndPoints[i+1], width);    
+         WallSegment *newSegment = new WallSegment(extendedEndPoints[i], extendedEndPoints[i+1], width, NULL);
          wallSegments.push_back(newSegment);            
       }
 
       Vector<Point> edges;
-      mWallSegmentManager.clipAllWallEdges(&wallSegments, edges);      // Remove interior wall outline fragments
+      mWallEdgeManager.clipAllWallEdges(wallSegments, edges);      // Remove interior wall outline fragments
 
       for(S32 i = 0; i < wallSegments.size(); i++)
-      {
-         WallSegment *wallSegment = static_cast<WallSegment *>(wallSegments[i]);
-         wallSegment->renderFill(Point(0,0), Colors::EDITOR_WALL_FILL_COLOR);
-      }
+         wallSegments[i]->renderFill(Point(0,0), Colors::EDITOR_WALL_FILL_COLOR, false);
 
-      renderWallEdges(edges, *getGame()->getSettings()->getWallOutlineColor());
+      GameObjectRender::renderWallEdges(edges, mGameSettings->getWallOutlineColor());
 
       for(S32 i = 0; i < wallSegments.size(); i++)
          delete wallSegments[i];
    }
 
-   glColor(mAnimStage <= 11 ? Colors::yellow : Colors::NeutralTeamColor);
+   mGL->glColor(mAnimStage <= 11 ? Colors::yellow : Colors::NeutralTeamColor);
 
-   glLineWidth(gLineWidth3);
+   mGL->glLineWidth(RenderUtils::LINE_WIDTH_3);
 
-   renderPointVector(&points, GL_LINES);
+   mGL->renderPointVector(&points, GLOPT::Lines);
 
-   glLineWidth(gDefaultLineWidth);
+   mGL->glLineWidth(RenderUtils::DEFAULT_LINE_WIDTH);
 
 
    FontManager::pushFontContext(OldSkoolContext);
@@ -462,11 +461,11 @@ void EditorInstructionsUserInterface::renderPageWalls()
       S32 vertNum = S32(((F32)i  / 2) + 0.5);     // Ick!
 
       if(i < (points.size() - ((mAnimStage > 6) ? 0 : 1) ) && !(i == 4 && (mAnimStage == 9 || mAnimStage == 10 || mAnimStage == 11)))
-         renderVertex(SelectedItemVertex, points[i], vertNum, 1);
+         GameObjectRender::renderVertex(SelectedItemVertex, points[i], vertNum, 1);
       else if(mAnimStage == 9 || mAnimStage == 10 || mAnimStage == 11)
-         renderVertex(SelectedVertex, points[i], vertNum);
+         GameObjectRender::renderVertex(SelectedVertex, points[i], vertNum);
       else  // mAnimStage > 11, moving vertices about
-         renderVertex(HighlightedVertex, points[i], -1, 1);
+         GameObjectRender::renderVertex(HighlightedVertex, points[i], -1, 1);
    }
 
    FontManager::popFontContext();

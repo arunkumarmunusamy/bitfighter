@@ -38,7 +38,7 @@ class ClientInfo : public SafePtrData, public RefPtrData
 {
 public:
    // Each role has all permissions a lesser one is granted
-   // Note:  changing this will break network compatibility
+   // Note:  Adding/deleting values from this enum will break network compatibility
    enum ClientRole {
       RoleNone,
       RoleLevelChanger,
@@ -48,7 +48,8 @@ public:
    };
 
    // Robots can be different classes... as we descend the following list, each class is a lower priority
-   // and can be more readily removed
+   // and can be more readily removed.  These classes are used to determine which bots to kick first when 
+   // applying team balancing schemes.
    enum ClientClass {
       ClassHuman,                   // Human player, obviously
       ClassRobotAddedByLevel,       // A bot, specified in the level file with Robot directive, along with a team
@@ -168,11 +169,11 @@ public:
    Int<BADGE_COUNT> getBadges();
    bool hasBadge(MeritBadges badge);
 
-   void setRole(ClientRole role);
-   ClientRole getRole();
-   bool isLevelChanger();
-   bool isAdmin();
-   bool isOwner();
+   void setRole(ClientRole role, bool displayNoticeToPlayers = true);
+   ClientRole getRole() const;
+   bool isLevelChanger() const;
+   bool isAdmin() const;
+   bool isOwner() const;
 
    virtual bool isRobot() const = 0;
 

@@ -19,7 +19,6 @@
 
 #include "stringUtils.h"
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 
 
 namespace ChatCommands
@@ -83,24 +82,24 @@ static void setVolume(ClientGame *game, VolumeType volType, const Vector<string>
       return;
    }
 
-   IniSettings *ini = game->getSettings()->getIniSettings();
+   GameSettings *settings = game->getSettings();
 
    switch(volType)
    {
       case SfxVolumeType:
-         ini->sfxVolLevel = (F32) vol / 10.f;
+         settings->setSetting(IniKey::EffectsVolume, (F32) vol * 0.1f);
          game->displayCmdChatMessage("SFX volume changed to %d %s", vol, vol == 0 ? "[MUTE]" : "");
          return;
 
       case MusicVolumeType:
-         ini->setMusicVolLevel((F32) vol / 10.f);
+         settings->setSetting(IniKey::MusicVolume, (F32) vol * 0.1f);
          game->displayCmdChatMessage("Music volume changed to %d %s", vol, vol == 0 ? "[MUTE]" : "");
          return;
 
       case VoiceVolumeType:
       {
-         F32 oldVol = ini->voiceChatVolLevel;
-         ini->voiceChatVolLevel = (F32) vol / 10.f;
+         F32 oldVol = settings->getSetting<F32>(IniKey::VoiceChatVolume);
+         settings->setSetting(IniKey::VoiceChatVolume, (F32) vol * 0.1f);
          game->displayCmdChatMessage("Voice chat volume changed to %d %s", vol, vol == 0 ? "[MUTE]" : "");
          if((oldVol == 0) != (vol == 0) && game->getConnectionToServer())
             game->getConnectionToServer()->s2rVoiceChatEnable(vol != 0);
@@ -501,12 +500,12 @@ void lineWidthHandler(ClientGame *game, const Vector<string> &words)
       if(linewidth < 0.125f)
          linewidth = 0.125f;
 
-      gDefaultLineWidth = linewidth;
-      gLineWidth1 = linewidth * 0.5f;
-      gLineWidth3 = linewidth * 1.5f;
-      gLineWidth4 = linewidth * 2;
+      RenderUtils::DEFAULT_LINE_WIDTH = linewidth;
+      RenderUtils::LINE_WIDTH_1 = linewidth * 0.5f;
+      RenderUtils::LINE_WIDTH_3 = linewidth * 1.5f;
+      RenderUtils::LINE_WIDTH_4 = linewidth * 2;
 
-      glLineWidth(gDefaultLineWidth);    //make this change happen instantly
+      RenderManager::getGL()->glLineWidth(RenderUtils::DEFAULT_LINE_WIDTH);    //make this change happen instantly
    }
 }
 
@@ -518,7 +517,7 @@ void maxFpsHandler(ClientGame *game, const Vector<string> &words)
    if(number < 1)                              // Don't allow zero or negative numbers
       game->displayErrorMessage("!!! Usage: /maxfps <frame rate>, default = 100");
    else
-      game->getSettings()->getIniSettings()->maxFPS = number;
+      game->getSettings()->setSetting(IniKey::MaxFpsClient, number);
 }
 
 
@@ -859,6 +858,18 @@ void kickBotsHandler(ClientGame *game, const Vector<string> &words)
 }
 
 
+void moreBotsHandler(ClientGame *game, const Vector<string> &words)
+{
+   game->moreBots();
+}
+
+
+void lessBotsHandler(ClientGame *game, const Vector<string> &words)
+{
+   game->lessBots();
+}
+
+
 void setMaxBotsHandler(ClientGame *game, const Vector<string> &words)
 {
    if(game->hasAdmin("!!! Need admin permission to change server settings"))
@@ -899,51 +910,81 @@ void shuffleTeams(ClientGame *game, const Vector<string> &words)
 }
 
 
+void lockTeams(ClientGame *game, const Vector<string> &words)
+{
+   if(!game->hasAdmin("!!! Need admin permissions to lock teams"))
+      return;
+
+   if(game->areTeamsLocked())
+   {
+      game->displayErrorMessage("!!! Teams already locked");
+      return;
+   }
+
+   game->getGameType()->c2sLockTeams(true);
+}
+
+
+void unlockTeams(ClientGame *game, const Vector<string> &words)
+{
+   if(!game->hasAdmin("!!! Need admin permissions to unlock teams"))
+      return;
+
+   if(!game->areTeamsLocked())
+   {
+      game->displayErrorMessage("!!! Teams not locked");
+      return;
+   }
+
+   game->getGameType()->c2sLockTeams(false);
+}
+
+
 void banPlayerHandler(ClientGame *game, const Vector<string> &words)
 {
-   if(game->hasAdmin("!!! Need admin permissions to ban players"))
+   if(!game->hasAdmin("!!! Need admin permissions to ban players"))
+      return;
+
+   if(words.size() < 2)
    {
-      if(words.size() < 2)
-      {
-         game->displayErrorMessage("!!! /ban <player name> [duration in minutes]");
-         return;
-      }
-
-      ClientInfo *bannedClientInfo = game->findClientInfo(words[1].c_str());
-
-      if(!bannedClientInfo)
-      {
-         game->displayErrorMessage("!!! Player name not found");
-         return;
-      }
-
-      if(bannedClientInfo->isRobot())
-      {
-         game->displayErrorMessage("!!! Cannot ban robots, you silly fool!");
-         return;
-      }
-
-      // This must be done before the admin check below
-      if(bannedClientInfo->isOwner())
-      {
-         game->displayErrorMessage("!!! Cannot ban a server owner");
-         return;
-      }
-
-      if(bannedClientInfo->isAdmin())
-      {
-         // Owners can ban admins
-         if(!game->hasOwner("!!! Cannot ban an admin"))
-            return;
-      }
-
-      S32 banDuration = 0;
-      if (words.size() > 2)
-         banDuration = atoi(words[2].c_str());
-
-      if(game->getGameType())
-         game->getGameType()->c2sBanPlayer(words[1].c_str(), banDuration);
+      game->displayErrorMessage("!!! /ban <player name> [duration in minutes]");
+      return;
    }
+
+   ClientInfo *bannedClientInfo = game->findClientInfo(words[1].c_str());
+
+   if(!bannedClientInfo)
+   {
+      game->displayErrorMessage("!!! Player name not found");
+      return;
+   }
+
+   if(bannedClientInfo->isRobot())
+   {
+      game->displayErrorMessage("!!! Cannot ban robots, you silly fool!");
+      return;
+   }
+
+   // This must be done before the admin check below
+   if(bannedClientInfo->isOwner())
+   {
+      game->displayErrorMessage("!!! Cannot ban a server owner");
+      return;
+   }
+
+   if(bannedClientInfo->isAdmin())
+   {
+      // Owners can ban admins
+      if(!game->hasOwner("!!! Cannot ban an admin"))
+         return;
+   }
+
+   S32 banDuration = 0;
+   if (words.size() > 2)
+      banDuration = atoi(words[2].c_str());
+
+   if(game->getGameType())
+      game->getGameType()->c2sBanPlayer(words[1].c_str(), banDuration);
 }
 
 

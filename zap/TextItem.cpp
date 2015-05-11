@@ -7,17 +7,17 @@
 
 #include "game.h"
 #include "ship.h"
-#include "stringUtils.h"
-
-#include "gameObjectRender.h"    // For renderTextItem()
+#include "Level.h"
 
 #include "Colors.h"
 
 #include "stringUtils.h"
 
 #ifndef ZAP_DEDICATED
-#include "RenderUtils.h"
-#include "ClientGame.h"
+#  include "ClientGame.h"
+#  include "GameObjectRender.h"    // For renderTextItem()
+#  include "RenderUtils.h"
+#  include "UIQuickMenu.h"
 #endif
 
 #include <cmath>
@@ -30,10 +30,6 @@ using namespace LuaArgs;
 
 TNL_IMPLEMENT_NETOBJECT(TextItem);
 
-
-#ifndef ZAP_DEDICATED
-EditorAttributeMenuUI *TextItem::mAttributeMenuUI = NULL;
-#endif
 
 // Combined Lua / C++ constructor
 TextItem::TextItem(lua_State *L)
@@ -79,7 +75,7 @@ void TextItem::fillAttributesVectors(Vector<string> &keys, Vector<string> &value
 }
 
 
-const char *TextItem::getInstructionMsg(S32 attributeCount)
+const char *TextItem::getInstructionMsg(S32 attributeCount) const
 {
    return "[Enter] to edit text";
 }
@@ -96,34 +92,48 @@ void TextItem::newObjectFromDock(F32 gridSize)
 
 
 // In game rendering
-void TextItem::render()
+void TextItem::render() const
 {
 #ifndef ZAP_DEDICATED
-   S32 ourTeam = static_cast<ClientGame*>(getGame())->getCurrentTeamIndex();
-
-   // Don't render opposing team's text items if we are in a game... but in editor preview mode, where
-   // we don't have a connection to the server, text will be rendered normally
-   // ourTeam == TEAM_NEUTRAL when in editor
-   if(ourTeam != getTeam() && getTeam() != TEAM_NEUTRAL && ourTeam != TEAM_NEUTRAL)
-      return;
-
-   renderTextItem(getVert(0), getVert(1), mSize, mText, getColor());
+   GameObjectRender::renderTextItem(getVert(0), getVert(1), mSize, mText, getColor());
 #endif
 }
 
 
 // Called by SimpleItem::renderEditor()
-void TextItem::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices)
+void TextItem::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices) const
 {
    Parent::renderEditor(currentScale, snappingToWallCornersEnabled);
    render();
 }
 
 
-const char *TextItem::getOnScreenName()     { return "Text";      }
-const char *TextItem::getOnDockName()       { return "TextItem";  }
-const char *TextItem::getPrettyNamePlural() { return "TextItems"; }
-const char *TextItem::getEditorHelpString() { return "Draws a bit of text on the map.  Visible only to team, or to all if neutral."; }
+const char *TextItem::getOnScreenName()     const  { return "Text";      }
+const char *TextItem::getOnDockName()       const  { return "TextItem";  }
+const char *TextItem::getPrettyNamePlural() const  { return "TextItems"; }
+const char *TextItem::getEditorHelpString() const  { return "Draws text on map.  Visible only to team, or to all if neutral."; }
+
+
+#ifndef ZAP_DEDICATED
+
+bool TextItem::startEditingAttrs(EditorAttributeMenuUI *attributeMenu)
+{
+   // "Blah" will be overwritten when startEditingAttrs() is called
+   TextEntryMenuItem *menuItem = new TextEntryMenuItem("Text: ", getText(), "", 
+                                                       "Use \\n for newline", MAX_TEXTITEM_LEN);
+                                                       menuItem->setTextEditedCallback(textEditedCallback);
+    attributeMenu->addMenuItem(menuItem);
+
+    return true;
+}
+
+
+void TextItem::doneEditingAttrs(EditorAttributeMenuUI *attributeMenu)
+{
+   setText(attributeMenu->getMenuItem(0)->getValue());
+}
+
+#endif
 
 
 bool TextItem::hasTeam()      { return true; }
@@ -131,7 +141,7 @@ bool TextItem::canBeHostile() { return true; }
 bool TextItem::canBeNeutral() { return true; }
 
 
-Color TextItem::getEditorRenderColor()
+const Color &TextItem::getEditorRenderColor() const
 {
    return Colors::blue;
 }
@@ -182,7 +192,7 @@ S32 TextItem::getRenderSortValue()
 
 // Create objects from parameters stored in level file
 // Entry looks like: TextItem 0 50 10 10 11 11 Message goes here
-bool TextItem::processArguments(S32 argc, const char **argv, Game *game)
+bool TextItem::processArguments(S32 argc, const char **argv, Level *level)
 {
    if(argc < 7)
       return false;
@@ -192,10 +202,10 @@ bool TextItem::processArguments(S32 argc, const char **argv, Game *game)
    Point pos, dir;
 
    pos.read(argv + 1);
-   pos *= game->getLegacyGridSize();
+   pos *= level->getLegacyGridSize();
 
    dir.read(argv + 3);
-   dir *= game->getLegacyGridSize();
+   dir *= level->getLegacyGridSize();
 
    setSize((F32)atof(argv[5]));
 
@@ -248,10 +258,20 @@ void TextItem::recalcTextSize()
 {
 #ifndef ZAP_DEDICATED
    const F32 dummyTextSize = 120;
+   F32 maxWidth = -1;
+
+   // Size text according to the longest line in a multi-line item
+   Vector<string> lines;
+   splitMultiLineString(replaceString(mText, "\\n", "\n"), lines);     // Split with '\n'
+   for(S32 i = 0; i < lines.size(); i++)
+   {
+      F32 strWidth = F32(RenderUtils::getStringWidth(dummyTextSize, lines[i].c_str())) / dummyTextSize;
+      if(strWidth > maxWidth)
+         maxWidth = strWidth;
+   }
 
    F32 lineLen = getVert(0).distanceTo(getVert(1));      // In in-game units
-   F32 strWidth = F32(getStringWidth(dummyTextSize, mText.c_str())) / dummyTextSize; 
-   F32 size = lineLen / strWidth;
+   F32 size = lineLen / maxWidth;
 
   setSize(size);
 #endif
@@ -262,20 +282,27 @@ void TextItem::onAddedToGame(Game *theGame)
 {
    Parent::onAddedToGame(theGame);
 
-   if(!isGhost())
+   if(isServer())
       setScopeAlways();
 }
 
 
+bool TextItem::isVisibleToTeam(S32 teamIndex) const
+{
+   // TextItems are only visible to those on the same team
+   return getTeam() == teamIndex || getTeam() == TEAM_NEUTRAL;
+}
+
+
 // Bounding box for display scoping purposes
-Rect TextItem::calcExtents()
+Rect TextItem::calcExtents() const
 {
 #ifdef ZAP_DEDICATED
    // Don't care much about it on the server, as server won't render, and nothing collides with TextItems
 	return(Rect(getVert(0), getVert(1)));
 #else
 
-   //F32 len = getStringWidth(mSize, mText.c_str());  // Somehow can't use this or else running with -dedicated will crash...
+   //F32 len = RenderUtils::getStringWidth(mSize, mText.c_str());  // Somehow can't use this or else running with -dedicated will crash...
    F32 len = getVert(0).distanceTo(getVert(1));       // This will work, assuming all Text never go past the verticies.
    //F32 buf = mSize / 2;     // Provides some room to accomodate descenders on letters like j and g.
 
@@ -343,7 +370,10 @@ U32 TextItem::packUpdate(GhostConnection *connection, U32 updateMask, BitStream 
    stream->writeRangedU32((U32)mSize, 0, MAX_TEXT_SIZE);
    writeThisTeam(stream);
 
-   stream->writeString(mText.c_str(), (U8) mText.length());      // Safe to cast text.length to U8 because we've limited it's length to MAX_TEXTITEM_LEN
+   TNLAssert(MAX_TEXTITEM_LEN <= U8_MAX, "Here, we will cast the length of a string limited by MAX_TEXTITEM_LEN to a U8, "\
+                                         "so it had better fit!");
+
+   stream->writeString(mText.c_str(), (U8) mText.length());      
 
    return 0;
 }
@@ -377,13 +407,15 @@ void TextItem::unpackUpdate(GhostConnection *connection, BitStream *stream)
 
 F32 TextItem::getUpdatePriority(GhostConnection *connection, U32 updateMask, S32 updateSkips)
 {
+   F32 basePriority = Parent::getUpdatePriority(connection, updateMask, updateSkips);
+
    // Lower priority for initial update.  This is to work around network-heavy loading of levels
    // with many TextItems, which will stall the client and prevent you from moving your ship
    if(isInitialUpdate())
-      return Parent::getUpdatePriority(connection, updateMask, updateSkips) - 1000.f;
+      return basePriority - 1000.f;
 
    // Normal priority otherwise so Geom changes are immediately visible to all clients
-   return Parent::getUpdatePriority(connection, updateMask, updateSkips);
+   return basePriority;
 }
 
 
@@ -396,14 +428,13 @@ void TextItem::onGeomChanging()  { onGeomChanged(); }
 void TextItem::onGeomChanged()
 {
    recalcTextSize();
-   setMaskBits(GeomMask);
    Parent::onGeomChanged();
 }
 
 
-void TextItem::textEditedCallback(string text, BfObject *obj)
+void TextItem::textEditedCallback(TextEntryMenuItem *item, const string &text, BfObject *obj)
 {
-   TextItem *textItem = dynamic_cast<TextItem *>(obj);
+   TextItem *textItem = static_cast<TextItem *>(obj);
    textItem->setText(text);
 }
 
