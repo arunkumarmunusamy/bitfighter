@@ -21,7 +21,6 @@
 #include "masterConnection.h"    // For MasterServerConnection def
 #include "VideoSystem.h"
 #include "SoundSystem.h"
-#include "OpenglUtils.h"
 #include "LoadoutIndicator.h"    // For LoadoutIndicatorHeight
 #include "ScreenShooter.h"
 
@@ -48,17 +47,27 @@ S32 UserInterface::messageMargin = UserInterface::vertMargin + UI::LoadoutIndica
 ////////////////////////////////////////
 
 // Constructor
-UserInterface::UserInterface(ClientGame *clientGame)
+UserInterface::UserInterface(ClientGame *clientGame, UIManager *uiManager)
 {
+   TNLAssert(clientGame, "Need a ClientGame to get settings!");
+
    mClientGame = clientGame;
+   mGameSettings = mClientGame->getSettings();
    mTimeSinceLastInput = 0;
    mDisableShipKeyboardInput = true;
+   mUiManager = uiManager;
 }
 
 
 UserInterface::~UserInterface()
 {
    // Do nothing
+}
+
+
+void UserInterface::setUiManager(UIManager *uiManager)
+{
+   mUiManager = uiManager;
 }
 
 
@@ -70,8 +79,7 @@ ClientGame *UserInterface::getGame() const
 
 UIManager *UserInterface::getUIManager() const 
 { 
-   TNLAssert(mClientGame, "mGame is NULL!");
-   return mClientGame->getUIManager(); 
+   return mUiManager;
 }
 
 
@@ -101,7 +109,7 @@ void UserInterface::onDisplayModeChange() { /* Do nothing */ }
 void UserInterface::onDeactivate(bool nextUIUsesEditorScreenMode)
 {
    if(nextUIUsesEditorScreenMode != usesEditorScreenMode())
-      VideoSystem::actualizeScreenMode(getGame()->getSettings(), true, nextUIUsesEditorScreenMode);
+      VideoSystem::actualizeScreenMode(mGameSettings, true, nextUIUsesEditorScreenMode);
 }
 
 
@@ -118,14 +126,13 @@ void UserInterface::playBoop()
 
 
 // Render master connection state if we're not connected
-void UserInterface::renderMasterStatus()
+void UserInterface::renderMasterStatus(const MasterServerConnection *connectionToMaster) const
 {
-   MasterServerConnection *conn = mClientGame->getConnectionToMaster();
-
-   if(conn && conn->getConnectionState() != NetConnection::Connected)
+   if(connectionToMaster && connectionToMaster->getConnectionState() != NetConnection::Connected)
    {
-      glColor(Colors::white);
-      drawStringf(10, 550, 15, "Master Server - %s", GameConnection::getConnectionStateString(conn->getConnectionState()));
+      mGL->glColor(Colors::white);
+      RenderUtils::drawStringf(10, 550, 15, "Master Server - %s",
+               GameConnection::getConnectionStateString(connectionToMaster->getConnectionState()));
    }
 }
 
@@ -135,15 +142,15 @@ void UserInterface::renderConsole() const
 #ifndef BF_NO_CONSOLE
    // Temporarily disable scissors mode so we can use the full width of the screen
    // to show our console text, black bars be damned!
-   bool scissorMode = glIsEnabled(GL_SCISSOR_TEST);
+   bool scissorMode = mGL->glIsEnabled(GLOPT::ScissorTest);
 
    if(scissorMode) 
-      glDisable(GL_SCISSOR_TEST);
+      mGL->glDisable(GLOPT::ScissorTest);
 
-   gConsole.render();
+   GameManager::gameConsole->render();
 
    if(scissorMode) 
-      glEnable(GL_SCISSOR_TEST);
+      mGL->glEnable(GLOPT::ScissorTest);
 #endif
 }
 
@@ -157,13 +164,13 @@ void UserInterface::renderMessageBox(const string &titleStr, const string &instr
    static const S32 TextSize = 18;
 
 
-   InputCodeManager *inputCodeManager = getGame()->getSettings()->getInputCodeManager();
+   InputCodeManager *inputCodeManager = mGameSettings->getInputCodeManager();
 
    SymbolShapePtr title = SymbolShapePtr(new SymbolString(titleStr, inputCodeManager, Context, TitleSize, false));
    SymbolShapePtr instr = SymbolShapePtr(new SymbolString(instrStr, inputCodeManager, Context, TextSize, false));
 
    Vector<string> wrappedLines;
-   wrapString(messageStr, UIManager::MessageBoxWrapWidth, TextSize, Context, wrappedLines);
+   RenderUtils::wrapString(messageStr, UIManager::MessageBoxWrapWidth, TextSize, Context, wrappedLines);
 
    Vector<SymbolShapePtr> message(wrappedLines.size());
 
@@ -177,13 +184,13 @@ void UserInterface::renderMessageBox(const string &titleStr, const string &instr
 void UserInterface::renderCenteredFancyBox(S32 boxTop, S32 boxHeight, S32 inset, S32 cornerInset, const Color &fillColor, 
                                            F32 fillAlpha, const Color &borderColor)
 {
-   drawFilledFancyBox(inset, boxTop, DisplayManager::getScreenInfo()->getGameCanvasWidth() - inset, boxTop + boxHeight, cornerInset, fillColor, fillAlpha, borderColor);
+   RenderUtils::drawFilledFancyBox(inset, boxTop, DisplayManager::getScreenInfo()->getGameCanvasWidth() - inset, boxTop + boxHeight, cornerInset, fillColor, fillAlpha, borderColor);
 }
 
 
 // Note that title and instr can be NULL
 void UserInterface::renderMessageBox(const SymbolShapePtr &title, const SymbolShapePtr &instr, 
-                                           SymbolShapePtr *message, S32 msgLines, S32 vertOffset, S32 style) const
+                                     const SymbolShapePtr *message, S32 msgLines, S32 vertOffset, S32 style) const
 {
    const S32 canvasWidth  = DisplayManager::getScreenInfo()->getGameCanvasWidth();
    const S32 canvasHeight = DisplayManager::getScreenInfo()->getGameCanvasHeight();
@@ -210,10 +217,12 @@ void UserInterface::renderMessageBox(const SymbolShapePtr &title, const SymbolSh
 
    S32 boxTop = (canvasHeight - boxHeight) / 2 + vertOffset;
 
-   S32 maxLen = 0;
+   static const S32 HorizBoxPadding = 20;
+
+   S32 maxLen = title ? title->getWidth() + HorizBoxPadding * 2 : 0;
+
    for(S32 i = 0; i < msgLines; i++)
    {
-      static const S32 HorizBoxPadding = 20;  
       S32 len = message[i]->getWidth() + HorizBoxPadding * 2;
       if(len > maxLen)
          maxLen = len;
@@ -250,9 +259,9 @@ void UserInterface::renderMessageBox(const SymbolShapePtr &title, const SymbolSh
 // Static method
 void UserInterface::dimUnderlyingUI(F32 amount)
 {
-   glColor(Colors::black, amount); 
+   mGL->glColor(Colors::black, amount);
 
-   drawFilledRect (0, 0, DisplayManager::getScreenInfo()->getGameCanvasWidth(), DisplayManager::getScreenInfo()->getGameCanvasHeight());
+   RenderUtils::drawFilledRect(0, 0, DisplayManager::getScreenInfo()->getGameCanvasWidth(), DisplayManager::getScreenInfo()->getGameCanvasHeight());
 }
 
 
@@ -260,14 +269,14 @@ void UserInterface::dimUnderlyingUI(F32 amount)
 void UserInterface::drawMenuItemHighlight(S32 x1, S32 y1, S32 x2, S32 y2, bool disabled)
 {
    if(disabled)
-      drawFilledRect(x1, y1, x2, y2, Colors::gray40, Colors::gray80);
+      RenderUtils::drawFilledRect(x1, y1, x2, y2, Colors::gray40, Colors::gray80);
    else
-      drawFilledRect(x1, y1, x2, y2, Colors::blue40, Colors::blue);
+      RenderUtils::drawFilledRect(x1, y1, x2, y2, Colors::blue40, Colors::blue);
 }
 
 
 // These will be overridden in child classes if needed
-void UserInterface::render() 
+void UserInterface::render() const
 { 
    // Do nothing -- probably never even gets called
 }
@@ -288,50 +297,49 @@ void UserInterface::onMouseMoved()
 void UserInterface::onMouseDragged()  { /* Do nothing */ }
 
 
+// Static method
 InputCode UserInterface::getInputCode(GameSettings *settings, BindingNameEnum binding)
 {
    return settings->getInputCodeManager()->getBinding(binding);
 }
 
 
-string UserInterface::getEditorBindingString(GameSettings *settings, EditorBindingNameEnum binding)
+string UserInterface::getEditorBindingString(EditorBindingNameEnum binding)
 {
-   return settings->getInputCodeManager()->getEditorBinding(binding);
+   return mGameSettings->getInputCodeManager()->getEditorBinding(binding);
 }
 
 
-string UserInterface::getSpecialBindingString(GameSettings *settings, SpecialBindingNameEnum binding)
+string UserInterface::getSpecialBindingString(SpecialBindingNameEnum binding)
 {
-   return settings->getInputCodeManager()->getSpecialBinding(binding);
+   return mGameSettings->getInputCodeManager()->getSpecialBinding(binding);
 }
 
 
-void UserInterface::setInputCode(GameSettings *settings, BindingNameEnum binding, InputCode inputCode)
+void UserInterface::setInputCode(BindingNameEnum binding, InputCode inputCode)
 {
-   settings->getInputCodeManager()->setBinding(binding, inputCode);
+   mGameSettings->getInputCodeManager()->setBinding(binding, inputCode);
 }
 
 
 bool UserInterface::checkInputCode(BindingNameEnum binding, InputCode inputCode)
 {
-   GameSettings *settings = getGame()->getSettings();
-
-   InputCode bindingCode = getInputCode(settings, binding);
+   InputCode bindingCode = getInputCode(mGameSettings, binding);
 
    // Handle modified keys
    if(InputCodeManager::isModified(bindingCode))
-      return inputCode == InputCodeManager::getBaseKey(bindingCode) && 
+      return inputCode == InputCodeManager::getBaseKeySpecialSequence(bindingCode) &&
              InputCodeManager::checkModifier(InputCodeManager::getModifier(bindingCode));
 
    // Else just do a simple key check.  filterInputCode deals with the numeric keypad.
    else
-      return bindingCode == settings->getInputCodeManager()->filterInputCode(inputCode);
+      return bindingCode == mGameSettings->getInputCodeManager()->filterInputCode(inputCode);
 }
 
 
-const char *UserInterface::getInputCodeString(GameSettings *settings, BindingNameEnum binding)
+const char *UserInterface::getInputCodeString(BindingNameEnum binding) const
 {
-   return InputCodeManager::inputCodeToString(getInputCode(settings, binding));
+   return InputCodeManager::inputCodeToString(getInputCode(mGameSettings, binding));
 }
 
 
@@ -345,7 +353,7 @@ bool UserInterface::onKeyDown(InputCode inputCode)
 
    bool handled = false;
 
-   UIManager *uiManager = getGame()->getUIManager();
+   UIManager *uiManager = getUIManager();
    string inputString = InputCodeManager::getCurrentInputString(inputCode);
 
    if(checkInputCode(BINDING_DIAG, inputCode))              // Turn on diagnostic overlay
@@ -359,14 +367,14 @@ bool UserInterface::onKeyDown(InputCode inputCode)
       
       handled = true;
    }
-   else if(checkInputCode(BINDING_OUTGAMECHAT, inputCode))  // Turn on Global Chat overlay
+   else if(checkInputCode(BINDING_LOBBYCHAT, inputCode))  // Turn on Lobby Chat overlay
    {
       // Don't activate if we're already in chat or if we're on the Name Entry
       // screen (since we don't have a nick yet)
       if(uiManager->isCurrentUI<ChatUserInterface>() || uiManager->isCurrentUI<NameEntryUserInterface>())
          return false;
 
-      getGame()->getUIManager()->activate<ChatUserInterface>();
+      getUIManager()->activate<ChatUserInterface>();
       playBoop();
 
       handled = true;
@@ -374,10 +382,10 @@ bool UserInterface::onKeyDown(InputCode inputCode)
    
 #ifndef BF_NO_SCREENSHOTS
    // Screenshot!
-   else if(inputString == getSpecialBindingString(getGame()->getSettings(), BINDING_SCREENSHOT_1) ||
-           inputString == getSpecialBindingString(getGame()->getSettings(), BINDING_SCREENSHOT_2))      
+   else if(inputString == getSpecialBindingString(BINDING_SCREENSHOT_1) ||
+           inputString == getSpecialBindingString(BINDING_SCREENSHOT_2))
    {
-      ScreenShooter::saveScreenshot(getUIManager(), getGame()->getSettings());
+      ScreenShooter::saveScreenshot(getUIManager(), mGameSettings);
       handled = true;
    }
 #endif
@@ -394,27 +402,31 @@ void UserInterface::onTextInput(char ascii)      { /* Do nothing */ }
 // This should make it easier to see what happens when users press joystick buttons.
 void UserInterface::renderDiagnosticKeysOverlay()
 {
-   if(GameManager::getClientGames()->get(0)->getSettings()->getIniSettings()->diagnosticKeyDumpMode)
+   // This setting can't be changed from in-game, so we can just grab the value at the outset and use that to save the lookup
+   static const bool dumpKeys = 
+         GameManager::getClientGames()->get(0)->getSettings()->getSetting<YesNo>(IniKey::DumpKeys);
+
+   if(dumpKeys)
    {
      S32 vpos = DisplayManager::getScreenInfo()->getGameCanvasHeight() / 2;
      S32 hpos = horizMargin;
 
-     glColor(Colors::white);
+     mGL->glColor(Colors::white);
 
      // Key states
      for (U32 i = 0; i < MAX_INPUT_CODES; i++)
         if(InputCodeManager::getState((InputCode) i))
-           hpos += drawStringAndGetWidth( hpos, vpos, 18, InputCodeManager::inputCodeToString((InputCode) i) );
+           hpos += RenderUtils::drawStringAndGetWidth( hpos, vpos, 18, InputCodeManager::inputCodeToString((InputCode) i) );
 
       vpos += 23;
       hpos = horizMargin;
-      glColor(Colors::magenta);
+      mGL->glColor(Colors::magenta);
 
       for(U32 i = 0; i < Joystick::MaxSdlButtons; i++)
          if(Joystick::ButtonMask & (1 << i))
          {
-            drawStringf( hpos, vpos, 18, "RawBut [%d]", i );
-            hpos += getStringWidthf(18, "RawBut [%d]", i ) + 5;
+            RenderUtils::drawStringf( hpos, vpos, 18, "RawBut [%d]", i );
+            hpos += RenderUtils::getStringWidthf(18, "RawBut [%d]", i ) + 5;
          }
    }
 }   

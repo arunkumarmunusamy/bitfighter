@@ -45,6 +45,7 @@ GhostConnection::GhostConnection()
 
    mGhostFrom = false;
    mGhostTo = false;
+   mClearUnscopedObjects = false;
 }
 
 GhostConnection::~GhostConnection()
@@ -182,7 +183,7 @@ void GhostConnection::packetReceived(PacketNotify *pnotify)
    }
 }
 
-static S32 QSORT_CALLBACK UQECompare(const void *a,const void *b)
+static S32 QSORT_CALLBACK prioritySort(const void *a, const void *b)
 {
    GhostInfo *ga = *((GhostInfo **) a);
    GhostInfo *gb = *((GhostInfo **) b);
@@ -198,21 +199,8 @@ void GhostConnection::prepareWritePacket()
    if(!doesGhostFrom() && !mGhosting)
       return;
 
-   if(mGhostFreeIndex > MaxGhostCount - 10)  // almost running out of GhostFreeIndex, free some objects not in scope.
-   {
-      for(S32 i = mGhostZeroUpdateIndex; i < mGhostFreeIndex; i++)
-      {
-         GhostInfo *walk = mGhostArray[i];
-         if(!(walk->flags & GhostInfo::ScopeLocalAlways))
-         {
-            if(!(walk->flags & GhostInfo::InScope))
-               detachObject(walk);
-            else
-               walk->flags &= ~GhostInfo::InScope;
-         }
-      }
-   }
-
+   if(mGhostFreeIndex > MaxGhostCount - 10)  // Almost running out of GhostFreeIndex, free some objects not in scope
+      descopeAndDetachObjects();
 
    // First step is to check all our polled ghosts:
 
@@ -226,7 +214,6 @@ void GhostConnection::prepareWritePacket()
 
    for(S32 i = 0; i < mGhostZeroUpdateIndex; i++)
    {
-      // Increment the updateSkip for everyone... it's all good
       GhostInfo *walk = mGhostArray[i];
       walk->updateSkipCount++;
       if(!(walk->flags & (GhostInfo::ScopeLocalAlways)))
@@ -237,12 +224,94 @@ void GhostConnection::prepareWritePacket()
       mScopeObject->performScopeQuery(this);
 }
 
+
+void GhostConnection::descopeAndDetachObjects()
+{
+   for(S32 i = mGhostZeroUpdateIndex; i < mGhostFreeIndex; i++)
+   {
+      GhostInfo *walk = mGhostArray[i];
+
+      if(walk->flags & GhostInfo::ScopeLocalAlways)
+         continue;
+
+      if(walk->flags & GhostInfo::InScope)               // If object is marked as being in scope,
+         walk->flags &= ~GhostInfo::InScope;             // then mark it as out of scope (we'll check the scope again later)
+      else                                               // If the object isn't in scope,
+         detachObject(walk);                             // then kill its ghost on the client
+   }
+}
+
+
+void GhostConnection::clearUnscopedObjects()
+{
+   // Set the flag to true... later, we'll actually do the work
+   mClearUnscopedObjects = true;
+
+   if(mClearUnscopedObjects)
+   {
+      removeUnscopedObjects();
+      mClearUnscopedObjects = false;
+   }
+
+}
+
+
+void GhostConnection::removeUnscopedObjects()
+{
+   markAllObjectsAsOutOfScope(false);     // Set all objects to being out-of-scope
+   performScopeQuery();                   // Mark any objects that are actually in-scope
+   detatchOutOfScopeObjects();            // Get rid of any objects that were not so-marked
+}
+
+
+void GhostConnection::markAllObjectsAsOutOfScope(bool updateSkipCount)
+{
+   for(S32 i = mGhostZeroUpdateIndex; i < mGhostFreeIndex; i++)
+   {
+      GhostInfo *walk = mGhostArray[i];
+
+      if(walk->flags & GhostInfo::ScopeLocalAlways)
+         continue;
+
+      walk->flags &= ~GhostInfo::InScope;
+
+      if(updateSkipCount)
+         walk->updateSkipCount++;
+   }
+}
+
+
+void GhostConnection::performScopeQuery()
+{
+   if(mScopeObject)
+      mScopeObject->performScopeQuery(this);
+}
+
+
+void GhostConnection::detatchOutOfScopeObjects()
+{
+   for(S32 i = mGhostZeroUpdateIndex; i < mGhostFreeIndex; i++)
+   {
+      GhostInfo *walk = mGhostArray[i];
+
+      if(walk->flags & GhostInfo::ScopeLocalAlways)
+         continue;
+
+      if(walk->flags & GhostInfo::InScope)
+         continue;
+
+      detachObject(walk);
+   }
+}
+
+
 bool GhostConnection::isDataToTransmit()
 {
    // Once we've run the scope query - if there are no objects that need to be updated,
    // we return false
    return Parent::isDataToTransmit() || mGhostZeroUpdateIndex != 0;
 }
+
 
 void GhostConnection::writePacket(BitStream *bstream, PacketNotify *pnotify)
 {
@@ -272,7 +341,7 @@ void GhostConnection::writePacket(BitStream *bstream, PacketNotify *pnotify)
    for(S32 i = mGhostZeroUpdateIndex - 1; i >= 0; i--)
    {
       if(!(mGhostArray[i]->flags & GhostInfo::InScope))
-         detachObject(mGhostArray[i]);
+         detachObject(mGhostArray[i]);    // Sets KillGhost flags, sets obj to NULL, among other things
    }
 
    U32 maxIndex = 0;
@@ -282,18 +351,18 @@ void GhostConnection::writePacket(BitStream *bstream, PacketNotify *pnotify)
       if(walk->index > maxIndex)
          maxIndex = walk->index;
 
-      // clear out any kill objects that haven't been ghosted yet
+      // Clear out any kill objects that haven't been ghosted yet
       if((walk->flags & GhostInfo::KillGhost) && (walk->flags & GhostInfo::NotYetGhosted))
       {
          freeGhostInfo(walk);
          continue;
       }
-      // don't do any ghost processing on objects that are being killed
+      // Don't do any ghost processing on objects that are being killed
       // or in the process of ghosting
       else if(!(walk->flags & (GhostInfo::KillingGhost | GhostInfo::Ghosting)))
       {
          if(walk->flags & GhostInfo::KillGhost)
-            walk->priority = 10000;
+            walk->priority = F32_MAX;
          else
             walk->priority = walk->obj->getUpdatePriority(this, walk->updateMask, walk->updateSkipCount);
       }
@@ -301,26 +370,30 @@ void GhostConnection::writePacket(BitStream *bstream, PacketNotify *pnotify)
          walk->priority = 0;
    }
    GhostRef *updateList = NULL;
+
    if(mGhostZeroUpdateIndex != 0)
-      qsort(&mGhostArray[0], mGhostZeroUpdateIndex, sizeof(GhostInfo *), UQECompare);
-   // reset the array indices...
+      qsort(&mGhostArray[0], mGhostZeroUpdateIndex, sizeof(GhostInfo *), prioritySort);
+
+   // Reset the array indices...
    for(S32 i = mGhostZeroUpdateIndex - 1; i >= 0; i--)
       mGhostArray[i]->arrayIndex = i;
 
-   U8 sendSize = 0;
+   U8 bitsNeededToSendMaxIndex = 0;
+
    while(maxIndex != 0)
    {
       maxIndex >>= 1;
-      sendSize++;
+      bitsNeededToSendMaxIndex++;
    }
 
-   if(sendSize < ID_BIT_OFFSET)
-      sendSize = ID_BIT_OFFSET;
+   if(bitsNeededToSendMaxIndex < ID_BIT_OFFSET)
+      bitsNeededToSendMaxIndex = ID_BIT_OFFSET;
 
    bool BitSizeWritten = false;
 
    U32 count = 0;
    bool have_something_to_send = bstream->getBitPosition() >= 256;
+
    for(S32 i = mGhostZeroUpdateIndex - 1; i >= 0 && !bstream->isFull(); i--)
    {
       GhostInfo *walk = mGhostArray[i];
@@ -332,14 +405,15 @@ void GhostConnection::writePacket(BitStream *bstream, PacketNotify *pnotify)
       U32 retMask = 0;
       ConnectionStringTable::PacketEntry *strEntry = getCurrentWritePacketNotify()->stringList.stringTail;;
 
-      bstream->writeFlag(true);
+      bstream->writeFlag(true);     // Signals that an object will be coming
+
       if(!BitSizeWritten)
       {
          BitSizeWritten = true;
-         TNLAssert(((sendSize - ID_BIT_OFFSET) >> ID_BIT_SIZE) == 0, "invalid range");
-         bstream->writeInt(sendSize - ID_BIT_OFFSET, ID_BIT_SIZE);
+         TNLAssert(((bitsNeededToSendMaxIndex - ID_BIT_OFFSET) >> ID_BIT_SIZE) == 0, "invalid range");
+         bstream->writeInt(bitsNeededToSendMaxIndex - ID_BIT_OFFSET, ID_BIT_SIZE);
       }
-      bstream->writeInt(walk->index, sendSize);
+      bstream->writeInt(walk->index, bitsNeededToSendMaxIndex);
       if(!bstream->writeFlag(walk->flags & GhostInfo::KillGhost))
       {
          // this is an update of some kind:
@@ -422,8 +496,10 @@ void GhostConnection::writePacket(BitStream *bstream, PacketNotify *pnotify)
             upd->ghostInfoFlags = GhostInfo::Ghosting;
          }
          walk->updateMask = retMask;
-         if(!retMask)
+         
+         if(retMask == 0)
             ghostPushToZero(walk);
+
          upd->mask = updateMask & ~retMask;
          walk->updateSkipCount = 0;
          count++;
@@ -432,7 +508,7 @@ void GhostConnection::writePacket(BitStream *bstream, PacketNotify *pnotify)
    // count # of ghosts have been updated,
    // mGhostZeroUpdateIndex # of ghosts remain to be updated.
    // no more objects...
-   bstream->writeFlag(false);
+   bstream->writeFlag(false);    // Last object, no more coming
    notify->ghostList = updateList;
 }
 
@@ -440,7 +516,7 @@ void GhostConnection::readPacket(BitStream *bstream)
 {
    Parent::readPacket(bstream);
 
-   if(mConnectionParameters.mDebugObjectSizes)
+   if(mConnectionParameters.mDebugObjectSizes)     // Only true for debug builds
    {
       U32 USED_EXTERNAL sum = bstream->readInt(32);
       TNLAssert(sum == DebugChecksum, "Invalid checksum.");
@@ -554,11 +630,11 @@ void GhostConnection::setScopeObject(NetObject *obj)
 
 void GhostConnection::detachObject(GhostInfo *info)
 {
-   // mark it for ghost killin'
+   // Mark it for ghost killin'
    info->flags |= GhostInfo::KillGhost;
 
-   // if the mask is in the zero range, we've got to move it up...
-   if(!info->updateMask)
+   // If the mask is in the zero range, we've got to move it up...
+   if(info->updateMask == 0)
    {
       info->updateMask = 0xFFFFFFFF;
       ghostPushNonZero(info);
@@ -571,8 +647,8 @@ void GhostConnection::detachObject(GhostInfo *info)
          info->obj->mFirstObjectRef = info->nextObjectRef;
       if(info->nextObjectRef)
          info->nextObjectRef->prevObjectRef = info->prevObjectRef;
-      // remove it from the lookup table
-      
+
+      // Remove it from the lookup table
       U32 id = info->obj->getHashId();
       for(GhostInfo **walk = &mGhostLookupTable[id & GhostLookupTableMask]; *walk; walk = &((*walk)->nextLookupInfo))
       {
@@ -675,14 +751,15 @@ void GhostConnection::objectInScope(NetObject *obj)
    {
       if(walk->obj != obj)
          continue;
+
       walk->flags |= GhostInfo::InScope;
       return;
    }
 
-   if(mGhostFreeIndex == MaxGhostCount)
+   if(mGhostFreeIndex == MaxGhostCount)      // No more room at the inn... sorry!
       return;
 
-   // create more GhostInfo here if needed
+   // Create more GhostInfo here if needed
    if(mGhostArray.size() == mGhostFreeIndex)
    {
       S32 i = mGhostArray.size();
@@ -791,6 +868,7 @@ void GhostConnection::deleteLocalGhosts()
       if(mLocalGhosts[i])
       {
          mLocalGhosts[i]->onGhostRemove();
+         //TNLAssert(mLocalGhosts[i]->getRefCount() == 1, "Object won't be deleted as expected!");
          mLocalGhosts[i]->decRef(); // This deletes the object
          mLocalGhosts[i] = NULL;
       }
@@ -802,7 +880,7 @@ void GhostConnection::clearGhostInfo()
    if(!mGhostFrom)
       return;
 
-   // gotta clear out the ghosts...
+   // Clear out the ghosts...
    for(PacketNotify *walk = mNotifyQueueHead; walk; walk = walk->nextPacket)
    {
       GhostPacketNotify *note = static_cast<GhostPacketNotify *>(walk);
@@ -829,6 +907,8 @@ void GhostConnection::clearGhostInfo()
    mGhostArray.clear();
 }
 
+
+// This is called at the end of a game, when preparing a new level
 void GhostConnection::resetGhosting()
 {
    if(!doesGhostFrom())
@@ -838,11 +918,14 @@ void GhostConnection::resetGhosting()
    
    mGhosting = false;
    mScoping = false;
+   mClearUnscopedObjects = false;
+
    rpcEndGhosting();
    mGhostingSequence++;
    clearGhostInfo();
    //TNLAssert(validateGhostArray(), "Invalid ghost array!");
 }
+
 
 //-----------------------------------------------------------------------------
 

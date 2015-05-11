@@ -17,7 +17,6 @@
 
 #include "stringUtils.h"
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 
 #include <string>
 #include <math.h>
@@ -27,7 +26,8 @@ namespace Zap
 using namespace std;
 
 // Constructor
-TextEntryUserInterface::TextEntryUserInterface(ClientGame *game) : Parent(game)  
+TextEntryUserInterface::TextEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER TEXT:";
    instr1 = "";
@@ -57,12 +57,12 @@ static const F32 fontSizeBig = 30.0f;
 static const S32 TextEntryYPos = 325;
 
 
-F32 TextEntryUserInterface::getFontSize()
+F32 TextEntryUserInterface::getFontSize() const
 {
    F32 maxLineLength = 750.0f;      // Pixels
 
    // Shrink the text to fit on-screen when text gets very long
-   F32 w = (F32)getStringWidthf(fontSizeBig, lineEditor.getDisplayString().c_str());
+   F32 w = (F32)RenderUtils::getStringWidthf(fontSizeBig, lineEditor.getDisplayString().c_str());
    if(w > maxLineLength)
       return maxLineLength * fontSizeBig / w;
    else
@@ -70,29 +70,29 @@ F32 TextEntryUserInterface::getFontSize()
 }
 
 
-void TextEntryUserInterface::render()
+void TextEntryUserInterface::render() const
 {
-   glColor(Colors::white);
+   mGL->glColor(Colors::white);
 
    const S32 canvasHeight = DisplayManager::getScreenInfo()->getGameCanvasHeight();
 
    // Center vertically
    S32 y = TextEntryYPos - 45 ;
 
-   drawCenteredString(y, fontSize, title);
+   RenderUtils::drawCenteredString(y, fontSize, title);
    y += 45;
 
-   glColor(Colors::green);
-   drawCenteredString(canvasHeight - vertMargin - 2 * fontSize - 5, fontSize, instr1);
-   drawCenteredString(canvasHeight - vertMargin - fontSize, fontSize, instr2);
+   mGL->glColor(Colors::green);
+   RenderUtils::drawCenteredString(canvasHeight - vertMargin - 2 * fontSize - 5, fontSize, instr1);
+   RenderUtils::drawCenteredString(canvasHeight - vertMargin - fontSize, fontSize, instr2);
 
-   glColor(Colors::white);
+   mGL->glColor(Colors::white);
 
    FontManager::pushFontContext(InputContext);
 
    TNLAssert(y == TextEntryYPos, "Something is off here!");
 
-   S32 x = (S32)drawCenteredString(y, getFontSize(), lineEditor.getDisplayString().c_str());
+   S32 x = (S32)RenderUtils::drawCenteredString(y, getFontSize(), lineEditor.getDisplayString().c_str());
    lineEditor.drawCursor(x, y, (S32)fontSizeBig);
    FontManager::popFontContext();
 }
@@ -151,7 +151,8 @@ void TextEntryUserInterface::setString(string str)
 ////////////////////////////////////////
 
 // Constructor
-LevelNameEntryUserInterface::LevelNameEntryUserInterface(ClientGame *game) : Parent(game)     
+LevelNameEntryUserInterface::LevelNameEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER LEVEL TO EDIT:";
    instr1 = "Enter an existing level, or create your own!";
@@ -184,7 +185,7 @@ void LevelNameEntryUserInterface::onActivate()
    Parent::onActivate();
    mLevelIndex = 0;
 
-   mLevels = getGame()->getSettings()->getLevelList();
+   mLevels = mGameSettings->getLevelList();
 
    // Remove the extension from the level file
    for(S32 i = 0; i < mLevels.size(); i++)
@@ -293,15 +294,14 @@ void LevelNameEntryUserInterface::onAccept(const char *name)
    getUIManager()->activate(ui, false);
    
    // Get that baby into the INI file
-   getGame()->getSettings()->getIniSettings()->lastEditorName = name;
-   saveSettingsToINI(&GameSettings::iniFile, getGame()->getSettings());             
+   mGameSettings->setSetting(IniKey::LastEditorName, string(name));
+   saveSettingsToINI(&GameSettings::iniFile, mGameSettings);
    // Should be...
    //getGame()->getIniSettings()->saveSettingsToDisk();
 }
 
-extern void drawHorizLine(S32,S32,S32);
 
-void LevelNameEntryUserInterface::render()
+void LevelNameEntryUserInterface::render() const
 {
    static const S32 linesBefore = 6;
    static const S32 linesAfter = 3;
@@ -309,15 +309,15 @@ void LevelNameEntryUserInterface::render()
    S32 startIndex = MAX(0, mLevelIndex - linesBefore);
    S32 endIndex = MIN(mLevels.size() - 1, mLevelIndex + linesAfter);
 
-   glColor(Colors::gray20);
+   mGL->glColor(Colors::gray20);
    for(S32 i = startIndex; i <= endIndex; i++)
    {
       if(i != mLevelIndex)
-         drawCenteredString(TextEntryYPos + F32(i - mLevelIndex) * ((F32)fontSize * 2.0f), getFontSize(), mLevels[i].c_str());
-//      drawHorizLine(100, 700, TextEntryYPos + F32(i - mLevelIndex) * ((F32)fontSize * 2.0f));
+         RenderUtils::drawCenteredString(TextEntryYPos + F32(i - mLevelIndex) * ((F32)fontSize * 2.0f), getFontSize(), mLevels[i].c_str());
+//      RenderUtils::drawHorizLine(100, 700, TextEntryYPos + F32(i - mLevelIndex) * ((F32)fontSize * 2.0f));
    }
 
-//   drawHorizLine(100, 700, TextEntryYPos + F32(mLevels.size() - mLevelIndex) * ((F32)fontSize * 2.0f));
+//   RenderUtils::drawHorizLine(100, 700, TextEntryYPos + F32(mLevels.size() - mLevelIndex) * ((F32)fontSize * 2.0f));
 
    Parent::render();
 }
@@ -327,7 +327,8 @@ void LevelNameEntryUserInterface::render()
 ////////////////////////////////////////
 
 // Constructor
-PasswordEntryUserInterface::PasswordEntryUserInterface(ClientGame *game) : Parent(game)
+PasswordEntryUserInterface::PasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    setSecret(true);
 }
@@ -340,7 +341,7 @@ PasswordEntryUserInterface::~PasswordEntryUserInterface()
 }
 
 
-void PasswordEntryUserInterface::render()
+void PasswordEntryUserInterface::render() const
 {
    const S32 canvasWidth = DisplayManager::getScreenInfo()->getGameCanvasWidth();
    const S32 canvasHeight = DisplayManager::getScreenInfo()->getGameCanvasHeight();
@@ -349,7 +350,7 @@ void PasswordEntryUserInterface::render()
    {
       getUIManager()->getUI<GameUserInterface>()->render();
 
-      glColor(Colors::black, 0.5);
+      mGL->glColor(Colors::black, 0.5);
 
       F32 vertices[] = {
             0,                 0,
@@ -357,7 +358,7 @@ void PasswordEntryUserInterface::render()
             (F32)canvasWidth, (F32)canvasHeight,
             0,                (F32)canvasHeight
       };
-      renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GL_TRIANGLE_FAN);
+      mGL->renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GLOPT::TriangleFan);
    }
 
    Parent::render();
@@ -368,9 +369,10 @@ void PasswordEntryUserInterface::render()
 ////////////////////////////////////////
 
 // Constructor
-ServerAccessPasswordEntryUserInterface::ServerAccessPasswordEntryUserInterface(ClientGame *game) : Parent(game)
+ServerAccessPasswordEntryUserInterface::ServerAccessPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
-   /* Do nothing */
+   // Do nothing
 }
 
 
@@ -402,12 +404,14 @@ void ServerAccessPasswordEntryUserInterface::setAddressToConnectTo(const Address
 ////////////////////////////////////////
 
 // Constructor
-ServerPasswordEntryUserInterface::ServerPasswordEntryUserInterface(ClientGame *game) : Parent(game)     
+ServerPasswordEntryUserInterface::ServerPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER SERVER PASSWORD:";
    instr1 = "";
    instr2 = "Enter the password required for access to the server";
 }
+
 
 // Destructor
 ServerPasswordEntryUserInterface::~ServerPasswordEntryUserInterface()
@@ -421,7 +425,8 @@ ServerPasswordEntryUserInterface::~ServerPasswordEntryUserInterface()
 
 
 // Constructor
-LevelChangeOrAdminPasswordEntryUserInterface::LevelChangeOrAdminPasswordEntryUserInterface(ClientGame *game) : Parent(game)     
+LevelChangeOrAdminPasswordEntryUserInterface::LevelChangeOrAdminPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    title = "ENTER PASSWORD:";
    instr1 = "";

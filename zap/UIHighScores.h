@@ -23,8 +23,8 @@ class HighScoresUserInterface : public UserInterface
 private:
    bool mHaveHighScores;
 
-   void renderScores();
-   void renderWaitingForScores();
+   void renderScores() const;
+   void renderWaitingForScores() const;
 
    struct ScoreGroup {
       string title;
@@ -35,12 +35,12 @@ private:
    Vector<ScoreGroup> mScoreGroups;
 
 public:
-   explicit HighScoresUserInterface(ClientGame *game);    // Constructor
+   explicit HighScoresUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~HighScoresUserInterface();
 
    void onActivate();
    void onReactivate();
-   void render();
+   void render() const;
    void idle(U32 timeDelta);
 
    void setHighScores(Vector<StringTableEntry> groupNames, Vector<string> names, Vector<string> scores);

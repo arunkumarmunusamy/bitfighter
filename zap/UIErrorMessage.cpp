@@ -14,7 +14,8 @@ namespace Zap
 {
 
 // Constructor
-AbstractMessageUserInterface::AbstractMessageUserInterface(ClientGame *game) : Parent(game)
+   AbstractMessageUserInterface::AbstractMessageUserInterface(ClientGame *game, UIManager *uiManager) :
+   Parent(game, uiManager)
 {
    reset();
 }
@@ -40,9 +41,9 @@ static const FontContext Context = ErrorMsgContext;
 void AbstractMessageUserInterface::setMessage(const string &message)
 {
    Vector<string> wrappedLines;
-   wrapString(message, UIManager::MessageBoxWrapWidth, TextHeight, Context, wrappedLines);
+   RenderUtils::wrapString(message, UIManager::MessageBoxWrapWidth, TextHeight, Context, wrappedLines);
 
-   InputCodeManager *inputCodeManager = getGame()->getSettings()->getInputCodeManager();
+   InputCodeManager *inputCodeManager = mGameSettings->getInputCodeManager();
 
    for(S32 i = 0; i < wrappedLines.size(); i++)
       mMessage[i] = SymbolShapePtr(new SymbolString(wrappedLines[i], inputCodeManager, Context, TextHeight, true));
@@ -61,13 +62,13 @@ void AbstractMessageUserInterface::setMaxLines(S32 lines)
 
 void AbstractMessageUserInterface::setTitle(const string &title)
 {
-   mTitle = SymbolShapePtr(new SymbolString(title, getGame()->getSettings()->getInputCodeManager(), Context, TitleSize, false));
+   mTitle = SymbolShapePtr(new SymbolString(title, mGameSettings->getInputCodeManager(), Context, TitleSize, false));
 }
 
 
 void AbstractMessageUserInterface::setInstr(const string &instr)
 {
-   mInstr = SymbolShapePtr(new SymbolString(instr, getGame()->getSettings()->getInputCodeManager(), Context, TextHeight, false));
+   mInstr = SymbolShapePtr(new SymbolString(instr, mGameSettings->getInputCodeManager(), Context, TextHeight, false));
 }
 
 
@@ -127,7 +128,7 @@ bool AbstractMessageUserInterface::onKeyDown(InputCode inputCode)
 }
 
 
-void AbstractMessageUserInterface::render()
+void AbstractMessageUserInterface::render() const
 {
    if(mRenderUnderlyingUi && getUIManager()->getPrevUI() != this)
       getUIManager()->renderPrevUI(this);
@@ -140,7 +141,8 @@ void AbstractMessageUserInterface::render()
 ////////////////////////////////////////
 
 // Constructor
-ErrorMessageUserInterface::ErrorMessageUserInterface(ClientGame *game) : Parent(game)
+ErrorMessageUserInterface::ErrorMessageUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    // Do nothing
 }

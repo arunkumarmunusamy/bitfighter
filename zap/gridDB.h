@@ -21,10 +21,12 @@ namespace Zap
 {
 
 typedef bool (*TestFunc)(U8);
+class BfObject;
 
 // Interface for dealing with objects that can be in our spatial database.
 class GridDatabase;
 class EditorObjectDatabase;
+class Level;
 struct DatabaseBucketEntry;
 class DatabaseObject;
 
@@ -42,7 +44,6 @@ struct DatabaseBucketEntry : public DatabaseBucketEntryBase
 
 class DatabaseObject : public GeomObject
 {
-
    typedef GeomObject Parent;
 
    friend class GridDatabase;
@@ -73,8 +74,10 @@ public:
 
    void setExtent(const Rect &extentRect);
    
-
    virtual const Vector<Point> *getCollisionPoly() const;
+   virtual bool checkForCollision(const Point &rayStart, const Point &rayEnd, bool format, U32 stateIndex,
+                                  F32 &collisionTime, Point &surfaceNormal) const;
+
    virtual bool getCollisionCircle(U32 stateIndex, Point &point, float &radius) const;
 
    virtual bool isCollisionEnabled() const;
@@ -91,6 +94,8 @@ public:
    virtual bool isDatabasable();    // Can this item actually be inserted into a database?
 
    virtual DatabaseObject *clone() const;
+
+   virtual void deleteThyself();
 };
 
 
@@ -107,12 +112,12 @@ private:
    static U32 mQueryId;
    static U32 mCountGridDatabase;      // Reference counter for destruction of mChunker
 
-   WallSegmentManager *mWallSegmentManager;
-
    Vector<DatabaseObject *> mAllObjects;
    Vector<DatabaseObject *> mGoalZones;
    Vector<DatabaseObject *> mFlags;
    Vector<DatabaseObject *> mSpyBugs;
+   Vector<DatabaseObject *> mPolyWalls;
+   Vector<DatabaseObject *> mWallitems;
 
    void findObjects(U8 typeNumber, Vector<DatabaseObject *> &fillVector, const Rect *extents, const IntRect *bins) const;
    void findObjects(Vector<U8> typeNumbers, Vector<DatabaseObject *> &fillVector, const Rect *extents, const IntRect *bins) const;
@@ -130,21 +135,24 @@ public:
 
    DatabaseBucketEntryBase mBuckets[BucketRowCount][BucketRowCount];
 
-   explicit GridDatabase(bool createWallSegmentManager = true);   // Constructor
-   // GridDatabase::GridDatabase(const GridDatabase &source);
-   virtual ~GridDatabase();                                       // Destructor
+   explicit GridDatabase();   // Constructor
+   virtual ~GridDatabase();   // Destructor
 
 
    static const S32 BucketWidthBitShift = 8;    // Width/height of each bucket in pixels, in a form of 2 ^ n, 8 is 256 pixels
 
    DatabaseObject *findObjectLOS(U8 typeNumber, U32 stateIndex, bool format, const Point &rayStart, const Point &rayEnd,
-                                 float &collisionTime, Point &surfaceNormal) const;
+                                 F32 &collisionTime, Point &surfaceNormal) const;
    DatabaseObject *findObjectLOS(U8 typeNumber, U32 stateIndex, const Point &rayStart, const Point &rayEnd,
-                                 float &collisionTime, Point &surfaceNormal) const;
+                                 F32 &collisionTime, Point &surfaceNormal) const;
    DatabaseObject *findObjectLOS(TestFunc testFunc, U32 stateIndex, bool format, const Point &rayStart, const Point &rayEnd,
-                                 float &collisionTime, Point &surfaceNormal) const;
+                                 F32 &collisionTime, Point &surfaceNormal) const;
    DatabaseObject *findObjectLOS(TestFunc testFunc, U32 stateIndex, const Point &rayStart, const Point &rayEnd,
-                                 float &collisionTime, Point &surfaceNormal) const;
+                                 F32 &collisionTime, Point &surfaceNormal) const;
+
+   DatabaseObject *findObjectLOS(const Vector<DatabaseObject *> &objList, U32 stateIndex, bool format,
+                                 const Point &rayStart, const Point &rayEnd, 
+                                 F32 &collisionTime, Point &surfaceNormal) const;
 
    bool pointCanSeePoint(const Point &point1, const Point &point2);
    void computeSelectionMinMax(Point &min, Point &max);
@@ -164,7 +172,6 @@ public:
 
    void copyObjects(const GridDatabase *source);
 
-
    bool testTypes(const Vector<U8> &types, U8 objectType) const;
 
 
@@ -172,15 +179,17 @@ public:
 
    
    Rect getExtents();      // Get the combined extents of every object in the database
-
-   WallSegmentManager *getWallSegmentManager() const;      
+   void updateExtents(DatabaseObject *object, const Rect &newExtents);
 
    void addToDatabase(DatabaseObject *databaseObject);
    void addToDatabase(const Vector<DatabaseObject *> &objects);
+   void addToDatabase(const Vector<BfObject *> &objects);
 
 
-   virtual void removeFromDatabase(DatabaseObject *theObject, bool deleteObject);
-   virtual void removeEverythingFromDatabase();
+   void removeFromDatabase(DatabaseObject *theObject, bool deleteObject);
+   void removeFromDatabase(S32 index, bool deleteObject);
+
+   void removeEverythingFromDatabase();
 
    S32 getObjectCount() const;                          // Return the number of objects currently in the database
    S32 getObjectCount(U8 typeNumber) const;             // Return the number of objects currently in the database of specified type

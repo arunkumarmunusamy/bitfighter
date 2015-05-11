@@ -32,12 +32,6 @@
 
 #include "SoundSystem.h"
 
-#if defined(TNL_OS_MOBILE) || defined(BF_USE_GLES)
-#  include "SDL_opengles.h"
-#else
-#  include "SDL_opengl.h"
-#endif
-
 
 namespace Zap
 {
@@ -174,11 +168,8 @@ void UIManager::renderPrevUI(const UserInterface *ui)
 
 void UIManager::activate(UserInterface *ui, bool save)  // save defaults to true
 {
-   if(mCurrentInterface)
-   {
-      if(save)
-         saveUI(mCurrentInterface);
-   }
+   if(mCurrentInterface && save)
+      saveUI(mCurrentInterface);
 
    mLastUI = mCurrentInterface;
    mLastWasLower = false;
@@ -208,7 +199,7 @@ void UIManager::onConnectionTerminated(const Address &serverAddress, NetConnecti
 {
    if(cameFrom<EditorUserInterface>())
      reactivate(getUI<EditorUserInterface>());
-   else if(getPrevUI() != NULL)    // Avoids Assert "There has been a failure in previous UI queuing!" in tests
+   else if(cameFrom<MainMenuUserInterface>())    // Avoids Assert "There has been a failure in previous UI queuing!" in tests
      reactivate(getUI<MainMenuUserInterface>());
 
 
@@ -427,6 +418,12 @@ void UIManager::onPlayerQuit(const char *name)
 }
 
 
+void UIManager::updateLeadingPlayerAndScore()
+{
+   getUI<GameUserInterface>()->updateLeadingPlayerAndScore();
+}
+
+
 void UIManager::onGameStarting()
 {
    getUI<GameUserInterface>()->onGameStarting();
@@ -437,6 +434,13 @@ void UIManager::onGameOver()
 {
    if(mUis[getTypeInfo<GameUserInterface>()])
       getUI<GameUserInterface>()->onGameOver();    // Closes helpers and such
+}
+
+
+void UIManager::onGameReallyAndTrulyOver()
+{
+   if(mUis[getTypeInfo<GameUserInterface>()])
+      getUI<GameUserInterface>()->onGameReallyAndTrulyOver();    // Closes helpers and such
 }
 
 
@@ -461,17 +465,17 @@ void UIManager::renderCurrent()
    if(mMenuTransitionTimer.getCurrent() && mLastUI)
    {
       // Save viewport
-      GLint viewport[4];
-      glGetIntegerv(GL_VIEWPORT, viewport);    
+      S32 viewport[4];
+      mGL->glGetValue(GLOPT::Viewport, viewport);
 
-      glViewport(viewport[0] + GLint((mLastWasLower ? 1 : -1) * viewport[2] * (1 - mMenuTransitionTimer.getFraction())), 0, viewport[2], viewport[3]);
+      mGL->glViewport(viewport[0] + S32((mLastWasLower ? 1 : -1) * viewport[2] * (1 - mMenuTransitionTimer.getFraction())), 0, viewport[2], viewport[3]);
       mLastUI->render();
 
-      glViewport(viewport[0] - GLint((mLastWasLower ? 1 : -1) * viewport[2] * mMenuTransitionTimer.getFraction()), 0, viewport[2], viewport[3]);
+      mGL->glViewport(viewport[0] - S32((mLastWasLower ? 1 : -1) * viewport[2] * mMenuTransitionTimer.getFraction()), 0, viewport[2], viewport[3]);
       mCurrentInterface->render();
 
       // Restore viewport for posterity
-      glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+      mGL->glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
       return;
    }
@@ -481,7 +485,7 @@ void UIManager::renderCurrent()
    // Run the active UI renderer
    mCurrentInterface->render();
    UserInterface::renderDiagnosticKeysOverlay();    // By putting this here, it will always get rendered, regardless of active UI
-   mCurrentInterface->renderMasterStatus();
+   mCurrentInterface->renderMasterStatus(mGame->getConnectionToMaster());
 }
 
 
@@ -523,10 +527,10 @@ MusicLocation UIManager::selectMusic()
 void UIManager::processAudio(U32 timeDelta)
 {
    SoundSystem::processAudio(timeDelta, 
-                             mSettings->getIniSettings()->sfxVolLevel,
-                             mSettings->getIniSettings()->getMusicVolLevel(),
-                             mSettings->getIniSettings()->voiceChatVolLevel,
-                             selectMusic());  
+                             mSettings->getSetting<F32>(IniKey::EffectsVolume),
+                             mSettings->getMusicVolume(),
+                             mSettings->getSetting<F32>(IniKey::VoiceChatVolume),
+                             selectMusic());
 }
 
 
@@ -597,8 +601,8 @@ void UIManager::setHighScores(const Vector<StringTableEntry> &groupNames, const 
 }
 
 
-// Message relayed through master -- global chat system
-void UIManager::gotGlobalChatMessage(const string &from, const string &message, bool isPrivate, bool isSystem, bool fromSelf)
+// Message relayed through master -- lobby chat system
+void UIManager::gotLobbyChatMessage(const string &from, const string &message, bool isPrivate, bool isSystem, bool fromSelf)
 {
    getUI<ChatUserInterface>()->newMessage(from, message, isPrivate, isSystem, fromSelf);
 }
@@ -610,21 +614,21 @@ void UIManager::gotServerListFromMaster(const Vector<ServerAddr> &serverList)
 }
 
 
-void UIManager::setPlayersInGlobalChat(const Vector<StringTableEntry> &playerNicks)
+void UIManager::setPlayersInLobbyChat(const Vector<StringTableEntry> &playerNicks)
 {
-   getUI<ChatUserInterface>()->setPlayersInGlobalChat(playerNicks);
+   getUI<ChatUserInterface>()->setPlayersInLobbyChat(playerNicks);
 }
 
 
-void UIManager::playerJoinedGlobalChat(const StringTableEntry &playerNick)
+void UIManager::playerJoinedLobbyChat(const StringTableEntry &playerNick)
 {
-   getUI<ChatUserInterface>()->playerJoinedGlobalChat(playerNick);
+   getUI<ChatUserInterface>()->playerJoinedLobbyChat(playerNick);
 }
 
 
-void UIManager::playerLeftGlobalChat(const StringTableEntry &playerNick)
+void UIManager::playerLeftLobbyChat(const StringTableEntry &playerNick)
 {
-   getUI<ChatUserInterface>()->playerLeftGlobalChat(playerNick);
+   getUI<ChatUserInterface>()->playerLeftLobbyChat(playerNick);
 }
 
 
@@ -691,7 +695,7 @@ void UIManager::renderLevelListDisplayer()
 }
 
 
-void UIManager::setMOTD(const char *motd)
+void UIManager::setMOTD(const string &motd)
 {
    getUI<MainMenuUserInterface>()->setMOTD(motd); 
 }
@@ -814,9 +818,15 @@ void UIManager::emitDebrisChunk(const Vector<Point> &points, const Color &color,
 }
 
 
-void UIManager::emitTextEffect(const string &text, const Color &color, const Point &pos)
+void UIManager::emitTextEffect(const string &text, const Color &color, const Point &pos, bool relative)
 {
-   getUI<GameUserInterface>()->emitTextEffect(text, color, pos);
+   getUI<GameUserInterface>()->emitTextEffect(text, color, pos, relative);
+}
+
+
+void UIManager::emitDelayedTextEffect(U32 delay, const string &text, const Color &color, const Point &pos, bool relative)
+{
+   getUI<GameUserInterface>()->emitDelayedTextEffect(delay, text, color, pos, relative);
 }
 
 
@@ -1010,12 +1020,6 @@ void UIManager::onGameTypeChanged()
 void UIManager::readRobotLine(const string &robotLine)
 {
    getUI<EditorUserInterface>()->addRobotLine(robotLine);
-}
-
-
-void UIManager::markEditorLevelPermanentlyDirty() 
-{
-   getUI<EditorUserInterface>()->markLevelPermanentlyDirty();
 }
 
 

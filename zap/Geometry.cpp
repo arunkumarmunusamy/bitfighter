@@ -213,7 +213,7 @@ void Geometry::readGeom(S32 argc, const char **argv, S32 firstCoord, F32 gridSiz
 }
 
 
-Rect Geometry::calcExtents()
+Rect Geometry::calcExtents() const
 {
    TNLAssert(false, "Not implemented");
    return Rect();
@@ -452,10 +452,21 @@ void PointGeometry::setGeom(const Vector<Point> &points)
 {
    if(points.size() >= 1)
       mPoint = points[0];
+
+   onPointsChanged();
 }
 
 
-Rect PointGeometry::calcExtents()
+Vector<Point> PointGeometry::getGeom() const
+{
+   Vector<Point> points(1);
+   points.push_back(mPoint);
+
+   return points;
+}
+
+
+Rect PointGeometry::calcExtents() const
 {
    return Rect(mPoint, mRadius);
 }
@@ -654,10 +665,24 @@ void SimpleLineGeometry::setGeom(const Vector<Point> &points)
       mFromPos = points[0];
       mToPos   = points[1];
    }
+
+   onPointsChanged();
 }
 
 
-Rect SimpleLineGeometry::calcExtents()
+Vector<Point> SimpleLineGeometry::getGeom() const
+{
+   Vector<Point> points(2);
+
+   points.push_back(mFromPos);
+   points.push_back(mToPos);
+
+   return points;
+}
+
+
+
+Rect SimpleLineGeometry::calcExtents() const
 {
    return Rect(mFromPos, mToPos);
 }
@@ -733,6 +758,7 @@ void PolylineGeometry::clearVerts()
 }
 
 
+// If ignoreMaxPointsLimit is true, other code depends on this always returning true
 bool PolylineGeometry::addVert(const Point &point, bool ignoreMaxPointsLimit) 
 { 
    if(mPolyBounds.size() >= Geometry::MAX_POLY_POINTS && !ignoreMaxPointsLimit)
@@ -850,8 +876,7 @@ const Vector<Point> *PolylineGeometry::getOutline() const
 
 const Vector<Point> *PolylineGeometry::getFill() const
 {
-   TNLAssert(false, "Polylines don't have fill!");
-   return NULL;
+   return &mPolyBounds;
 }
 
 
@@ -911,10 +936,23 @@ void PolylineGeometry::setGeom(const Vector<Point> &points)
    }
 
    mVertSelected.resize(mPolyBounds.size());
+
+   onPointsChanged();
 }
 
 
-Rect PolylineGeometry::calcExtents()
+Vector<Point> PolylineGeometry::getGeom() const
+{
+   Vector<Point> points(mPolyBounds.size());
+
+   for(S32 i = 0; i < mPolyBounds.size(); i++)
+      points.push_back(mPolyBounds[i]);
+
+   return points;
+}
+
+
+Rect PolylineGeometry::calcExtents() const
 {
    return Rect(mPolyBounds);
 }
@@ -949,7 +987,7 @@ static void readPolyBounds(S32 argc, const char **argv, S32 firstCoord, F32 grid
    // Make sure we don't crash with firstCoord = 0; argc = 7; or some uneven number
    for(S32 i = firstCoord; i < argc - 1; i += 2)
    {
-      // If we are loading legacy levels (earlier than 019), then they used a gridsize multiplier.
+      // If we are loading legacy levels (earlier than 019), then we have a gridsize multiplier
       if(gridSize != 1.f)
          p.set( (F32) (atof(argv[i]) * gridSize), (F32) (atof(argv[i+1]) * gridSize ) );
       else
@@ -972,7 +1010,6 @@ static void readPolyBounds(S32 argc, const char **argv, S32 firstCoord, F32 grid
 }
 
 
-// For walls at least, this is client (i.e. editor) only; walls processed in ServerGame::processPseudoItem() on server
 void PolylineGeometry::readGeom(S32 argc, const char **argv, S32 firstCoord, F32 gridSize)
 {
     readPolyBounds(argc, argv, firstCoord, gridSize, true, mPolyBounds, mVertSelected);      // Fills mPolyBounds
@@ -986,7 +1023,13 @@ void PolylineGeometry::onPointsChanged()
    if(mPolyBounds.size() == 2)
       mCentroid = (mPolyBounds[0] + mPolyBounds[1]) * 0.5f;
    else
-      mCentroid = findCentroid(mPolyBounds);
+      mCentroid = doFindCentroid(mPolyBounds);
+}
+
+
+Point PolylineGeometry::doFindCentroid(const Vector<Point> &pts) const
+{
+   return findCentroid(mPolyBounds, true);
 }
 
 
@@ -1062,5 +1105,12 @@ S32 PolygonGeometry::getMinVertCount() const
 {
    return 3;
 }
+
+
+Point PolygonGeometry::doFindCentroid(const Vector<Point> &pts) const
+{
+   return findCentroid(mPolyBounds, false);
+}
+
 
 };

@@ -41,6 +41,7 @@
 
 #include <math.h>
 #include <deque>
+#include <algorithm>
 
 using namespace TNL;
 using namespace ClipperLib;
@@ -216,35 +217,35 @@ bool triangulatedFillContains(const Vector<Point> *triangulatedFillPoints, const
 
 //// Based on http://www.opengl.org/discussion_boards/ubbthreads.php?ubb=showflat&Number=248453
 //// No idea if this is optimal or not, but it is only used in the editor, and works fine for our purposes.
-//bool isConvex(const Vector<Point> *verts)
-//{
-//  Point v1, v2;
-//  double det_value, cur_det_value;
-//  int num_vertices = verts->size();
-//  
-//  if(num_vertices < 3)
-//     return true;
-//  
-//  v1 = verts->get(0) - verts->get(num_vertices-1);
-//  v2 = verts->get(1) - verts->get(0);
-//  det_value = v1.determinant(v2);
-//  
-//  for(S32 i = 1 ; i < num_vertices-1 ; i++)
-//  {
-//    v1 = v2;
-//    v2 = verts->get(i+1) - verts->get(i);
-//    cur_det_value = v1.determinant(v2);
-//    
-//    if( (cur_det_value * det_value) < 0.0 )
-//      return false;
-//  }
-//  
-//  v1 = v2;
-//  v2 = verts->get(0) - verts->get(num_vertices-1);
-//  cur_det_value = v1.determinant(v2);
-//  
-//  return  (cur_det_value * det_value) >= 0.0;
-//}
+bool isConvex(const Vector<Point> *verts)
+{
+  Point v1, v2;
+  double det_value, cur_det_value;
+  int num_vertices = verts->size();
+  
+  if(num_vertices < 3)
+     return true;
+  
+  v1 = verts->get(0) - verts->get(num_vertices-1);
+  v2 = verts->get(1) - verts->get(0);
+  det_value = v1.determinant(v2);
+  
+  for(S32 i = 1 ; i < num_vertices-1 ; i++)
+  {
+    v1 = v2;
+    v2 = verts->get(i+1) - verts->get(i);
+    cur_det_value = v1.determinant(v2);
+    
+    if( (cur_det_value * det_value) < 0.0 )
+      return false;
+  }
+  
+  v1 = v2;
+  v2 = verts->get(0) - verts->get(num_vertices-1);
+  cur_det_value = v1.determinant(v2);
+  
+  return  (cur_det_value * det_value) >= 0.0;
+}
 
 
 // If the sum of the radii is greater than the distance between the center points,
@@ -371,7 +372,7 @@ bool polygonIntersectsSegmentDetailed(const Point *poly, U32 vertexCount, bool f
 
    S32 inc = format ? 1 : 2;
 
-   F32 currentCollisionTime = 100;
+   F32 currentCollisionTime = F32_MAX;
 
    for(U32 i = 0; i < vertexCount - (inc - 1); i += inc)    // Count by 1s when format is true, 2 when false
    {
@@ -413,9 +414,10 @@ bool polygonIntersectsSegmentDetailed(const Point *poly, U32 vertexCount, bool f
    return false;
 }
 
-bool circleIntersectsSegment(Point center, float radius, Point start, Point end, float &collisionTime)
+
+bool circleIntersectsSegment(Point center, F32 radius, Point start, Point end, F32 &collisionTime)
 {
-   // if the point is in the circle, it's a collision at the start
+   // If the point is in the circle, it's a collision at the start
    Point d = center - start;
    Point v = end - start;
 
@@ -425,7 +427,7 @@ bool circleIntersectsSegment(Point center, float radius, Point start, Point end,
       return true;
    }
 
-   // otherwise, solve the following equation for t
+   // Otherwise, solve the following equation for t
    // (d - vt)^2 = radius^2
 
    float a = v.dot(v);
@@ -894,7 +896,8 @@ Paths upscaleClipperPoints(const Vector<const Vector<Point> *> &inputPolygons)
       outputPolygons[i].resize(inputPolygons[i]->size());
 
       for(S32 j = 0; j < inputPolygons[i]->size(); j++)
-         outputPolygons[i][j] = IntPoint(S64(inputPolygons[i]->get(j).x * CLIPPER_SCALE_FACT), S64(inputPolygons[i]->get(j).y * CLIPPER_SCALE_FACT));
+         outputPolygons[i][j] = IntPoint(S64(inputPolygons[i]->get(j).x * CLIPPER_SCALE_FACT), 
+                                         S64(inputPolygons[i]->get(j).y * CLIPPER_SCALE_FACT));
    }
 
    return outputPolygons;
@@ -1044,7 +1047,7 @@ bool clipPolygonsAsTree(ClipType operation, const Vector<Vector<Point> > &subjec
  * Perform a Clipper operation on two sets of polygons, giving the result as a
  * Vector<Vector<Point> >
  */
-bool clipPolys(ClipType operation, const Vector<Vector<Point> > &subject, const Vector<Vector<Point> > &clip, Vector<Vector<Point> > &result, bool merge)
+bool clipPolygons(ClipType operation, const Vector<Vector<Point> > &subject, const Vector<Vector<Point> > &clip, Vector<Vector<Point> > &result, bool merge)
 {
    PolyTree solution;
    bool success = clipPolygonsAsTree(operation, subject, clip, solution);
@@ -1417,15 +1420,21 @@ Vector<Point> floatsToPoints(const Vector<F32> floats)
 // Test if a complex polygon has clockwise point winding order
 // Implemented from
 // http://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order/1165943#1165943
-bool isWoundClockwise(const Vector<Point>& inputPoly)
+bool isWoundClockwise(const Vector<Point> &inputPoly)
+{
+   return isWoundClockwise(&inputPoly);
+}
+
+
+bool isWoundClockwise(const Vector<Point> *inputPoly)
 {
    F32 finalSum = 0;
-   S32 i_prev = inputPoly.size() - 1;
+   S32 i_prev = inputPoly->size() - 1;
 
-   for(S32 i = 0; i < inputPoly.size(); i++)
+   for(S32 i = 0; i < inputPoly->size(); i++)
    {
       // (x2-x1)(y2+y1)
-      finalSum += (inputPoly[i].x - inputPoly[i_prev].x) * (inputPoly[i].y + inputPoly[i_prev].y);
+      finalSum += (inputPoly->get(i).x - inputPoly->get(i_prev).x) * (inputPoly->get(i).y + inputPoly->get(i_prev).y);
       i_prev = i;
    }
 
@@ -1607,20 +1616,211 @@ bool Triangulate::mergeTriangles(const Vector<Point> &triangleData, rcPolyMesh& 
 }
 
 
+
+
+
+
+////
+////
+////#include <cmath>
+//
+//bool point_order_x(const Point& p1, const Point& p2)
+//{
+//   if(p1.x < p2.x)
+//      return true;
+//   else if(p1.x == p2.x)
+//      return p1.y < p2.y;
+//   else
+//      return false;
+//}
+//
+//bool iscw(const Point &p1, const Point &p2, const Point &p3)
+//{
+//   return (p1.x - p2.x) * (p2.y - p3.y) - (p1.y - p2.y) * (p2.x - p3.x) < 0;
+//}
+//
+//bool iscw(const vector<Point>& pg){
+//   if(pg.size() < 3)
+//      throw domain_error("Can't compute iscw with less than 3 points");
+//   else
+//   {
+//      vector<Point>::size_type i = pg.size() - 1;
+//      return iscw(pg[i - 2], pg[i - 1], pg[i]);
+//   }
+//}
+//
+//
+//void simpleHull_2D(const vector<Point> &pst, vector<Point> &hull)
+//{
+//   vector<Point> points(pst);
+//   vector<Point> lupper, llower;
+//   typedef vector<Point>::size_type vcs;
+//
+//   std::sort(points.begin(), points.end(), point_order_x);
+//   vector<Point>::const_iterator it;
+//
+//   //Constructing the upper hull. 
+//   //The point with lowest x will be part of the hull
+//   lupper.push_back(points[0]);
+//   lupper.push_back(points[1]);
+//
+//   //Loop the rest of the points to obtain the upper hull
+//   for(it = points.begin() + 2; it != points.end(); ++it){
+//      lupper.push_back(*it);
+//
+//      //while size>2 and not a right turn
+//      while((lupper.size() > 2) && !iscw(lupper))
+//         lupper.erase(lupper.end() - 2);
+//   }
+//
+//   //Constructing the lower hull.
+//   it = points.end() - 1;
+//   llower.push_back(*it);
+//   llower.push_back(*(it - 1));
+//
+//   for(it = points.end() - 3; it >= points.begin(); --it){
+//      llower.push_back(*it);
+//
+//      //while size>2 and not a right turn
+//      while((llower.size() > 2) && !iscw(llower))
+//         llower.erase(llower.end() - 2);
+//
+//   }
+//
+//   //First llower is already in lupper
+//   copy(lupper.begin(),     lupper.end(), back_inserter(hull));
+//   copy(llower.begin() + 1, llower.end(), back_inserter(hull));
+//}
+//
+//
+//
+
+
+
+
+
+
+/////
+ //Requires 3 points!
+
+///////
+// Requires 3 points!
+
+// Copyright 2001 softSurfer, 2012 Dan Sunday
+// This code may be freely used and modified for any purpose
+// providing that this copyright notice is included with it.
+// SoftSurfer makes no warranty for this code, and cannot be held
+// liable for any real or imagined damage resulting from its use.
+// Users of this code must verify correctness for their application.
+
+// isLeft(): test if a point is Left|On|Right of an infinite line.
+//    Input:  three points P0, P1, and P2
+//    Return: >0 for P2 left of the line through P0 and P1
+//            =0 for P2 on the line
+//            <0 for P2 right of the line
+//    See: Algorithm 1 on Area of Triangles
+
+// Note: replaced included isLeft function with similar function included for other algos --CE
+// Note: modified function to work with Vector<Point> --CE
+
+// Explanation here: http://geomalgorithms.com/a12-_hull-3.html
+// Very fast, but only works on a connected simple polyline with no abnormal self-intersections
+
+// simpleHull_2D(): Melkman's 2D simple polyline O(n) convex hull algorithm
+//    Input:  P[] = array of 2D vertex points for a simple polyline
+//    Output: H[] = output convex hull array of vertices (max is n)
+void simpleHull_2D(const Vector<Point> &P, Vector<Point> &H)
+{
+   // initialize a deque D[] from bottom to top so that the
+   // 1st three vertices of P[] are a ccw triangle
+   Vector<Point> D;
+   D.resize(2 * P.size() + 1);      // Fills the vector with points
+
+   // initial bottom and top deque indices
+   int bot = P.size() - 2;
+   int top = bot + 3;    
+
+   D[bot] = D[top] = P[2];        // 3rd vertex is at both bot and top
+   if(isLeft(P[0], P[1], P[2]) > 0) 
+   {
+      D[bot + 1] = P[0];
+      D[bot + 2] = P[1];           // ccw vertices are: 2,0,1,2
+   }
+   else 
+   {
+      D[bot + 1] = P[1];
+      D[bot + 2] = P[0];           // ccw vertices are: 2,1,0,2
+   }
+
+   // compute the hull on the deque D[]
+   for(int i = 3; i < P.size(); i++)   // process the rest of vertices
+   {   
+      // test if next vertex is inside the deque hull
+      if((isLeft(D[bot], D[bot + 1], P[i]) > 0) &&
+         (isLeft(D[top - 1], D[top], P[i]) > 0))
+         continue;         // skip an interior vertex
+
+      // incrementally add an exterior vertex to the deque hull
+      // get the rightmost tangent at the deque bot
+      while(isLeft(D[bot], D[bot + 1], P[i]) <= 0)
+         ++bot;                 // remove bot of deque
+      D[--bot] = P[i];           // insert P[i] at bot of deque
+
+      // get the leftmost tangent at the deque top
+      while(isLeft(D[top - 1], D[top], P[i]) <= 0)
+         --top;                 // pop top of deque
+      D[++top] = P[i];           // push P[i] onto top of deque
+   }
+
+   // transcribe deque D[] to the output hull array H[]
+   H.reserve(top - bot);
+
+   for(int h = 0; h <= (top - bot); h++)
+      H.push_back(D[bot + h]);
+}
+
+
+Point simple_centroid(const Vector<Point> &points)
+{
+   Point sum;
+
+   // Calc the average of all points.  Almost certainly wrong, but works well enough in most cases
+   for(int i = 0; i < points.size(); ++i)
+      sum = sum + points[i];
+
+   return Point(sum.x / points.size(), sum.y / points.size());
+}
+
+
 // Derived from formulae here: http://local.wasp.uwa.edu.au/~pbourke/geometry/polyarea/
 //
 // This will fail if the area sum is 0; e.g. with certain self-intersecting polygons
-Point findCentroid(const Vector<Point> &polyPoints)
+Point findCentroid(const Vector<Point> &points, bool isPolyline)
 {
-   S32 size = polyPoints.size();
+   // Create a convex hull around points, and find centroid of that -- this helps resolve weirdness we get
+   // when we try to calcluate the centroid of a Z shaped line
 
-   if(size == 0)
-      return Point(0,0);
+   if(points.size() == 0)
+      return Point(0, 0);
+
+   // Handle common cases quickly
+   if(points.size() == 1)
+      return points[0];
+
+   if(points.size() == 2)
+      return (points[0] + points[1]) / 2;
+
+   if(isPolyline /*&& !isConvex(&points)*/)
+      return simple_centroid(points);
+
+   Vector<Point> hullPoints;
 
    F32 x = 0;
    F32 y = 0;
    F32 sArea = 0;  // Signed area
    F32 area = 0;   // Partial signed area
+
+   S32 size = points.size();
 
    Point p1;
    Point p2;
@@ -1628,8 +1828,8 @@ Point findCentroid(const Vector<Point> &polyPoints)
    // All vertices except last
    for(S32 i = 0; i < size - 1; i++)
    {
-      p1 = polyPoints[i];
-      p2 = polyPoints[i+1];
+      p1 = points[i];
+      p2 = points[i + 1];
 
       area = (p1.x * p2.y - p2.x * p1.y);
       sArea += area;
@@ -1639,8 +1839,8 @@ Point findCentroid(const Vector<Point> &polyPoints)
    }
 
    // Do last vertex
-   p1 = polyPoints[size - 1];
-   p2 = polyPoints[0];
+   p1 = points[size - 1];
+   p2 = points[0];
 
    area = (p1.x * p2.y - p2.x * p1.y);
    sArea += area;
@@ -1654,6 +1854,63 @@ Point findCentroid(const Vector<Point> &polyPoints)
    y /= sArea;
 
    return Point(x,y);
+}
+
+
+// Faster circle algorithm adapted from:  http://slabode.exofire.net/circle_draw.shtml
+void generatePointsInACurve(F32 startAngle, F32 endAngle, S32 numPoints, F32 radius, Vector<Point> &points)
+{
+   TNLAssert(endAngle > startAngle, "End angle must be greater than start angle!");
+   TNLAssert(endAngle - startAngle <= FloatTau + .0001, "Difference in angles should be <= FloatTau");
+
+   points.resize(numPoints);
+
+   F32 theta = (endAngle - startAngle) / (numPoints - 1);
+
+   // Precalculate the sin and cos
+   F32 cosTheta = cosf(theta);
+   F32 sinTheta = sinf(theta);
+
+   F32 curX = radius * cosf(startAngle);
+   F32 curY = radius * sinf(startAngle);
+   F32 prevX;
+
+   // This is a repeated rotation
+   for(S32 i = 0; i < numPoints; i++)
+   {
+      points[i].set(curX, curY);
+
+      // Apply the rotation matrix
+      prevX = curX;
+      curX = (cosTheta * curX) - (sinTheta * curY);
+      curY = (sinTheta * prevX) + (cosTheta * curY);
+   }
+}
+
+
+void generatePointsInACircle(S32 numPoints, F32 radius, Vector<Point> &points)
+{
+   generatePointsInACurve(0, FloatTau, numPoints, radius, points);
+}
+
+
+void generatePointsInASemiCircle(S32 numPoints, F32 radius, Vector<Point> &points)
+{
+   generatePointsInACurve(0, FloatPi, numPoints, radius, points);
+}
+
+
+// [-I-] ==> y1, y2 are the coords at the top and bottom vertex of the I, width the the edge-to-edge width of the brackets
+void generatePointsInARectangle(F32 width, F32 y1, F32 y2, Vector<Point> &points)
+{
+   F32 halfWidth = width * 0.5f;
+
+   points.resize(4);
+
+   points[0].set(-halfWidth, y1);
+   points[1].set( halfWidth, y1);
+   points[2].set( halfWidth, y2);
+   points[3].set(-halfWidth, y2);
 }
 
 
@@ -1995,7 +2252,7 @@ S32 lua_clipPolygons(lua_State* L)
 
    // try to execute the operation
    Vector<Vector<Point> > output;
-   if(!clipPolys(operation, subject, clip, output, merge))
+   if(!clipPolygons(operation, subject, clip, output, merge))
       return returnNil(L);
 
    // return the polygons if we're successful
@@ -2084,7 +2341,7 @@ S32 lua_offsetPolygons(lua_State *L)
 {
    checkArgList(L, "Geom", "offsetPolygons");
 
-   F32 amount = lua_tonumber(L, 1);
+   F32 amount = (F32)lua_tonumber(L, 1);     // lua_tonumber returns a double
    Vector<Vector<Point> > input = getPolygons(L, 2);
 
    lua_pop(L, 2);

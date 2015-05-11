@@ -8,7 +8,7 @@
 #include "UIManager.h"
 
 #include "ClientGame.h"
-#include "gameObjectRender.h"
+#include "GameObjectRender.h"
 #include "Teleporter.h"
 #include "speedZone.h"        // For SpeedZone::height
 #include "Colors.h"
@@ -21,7 +21,6 @@
 #include "FontManager.h"
 
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 #include "GeomUtils.h"
 #include "stringUtils.h"
 
@@ -62,10 +61,10 @@ static const TypeDescr typeDescriptions[] = {
 
 
 // Constructor
-InstructionsUserInterface::InstructionsUserInterface(ClientGame *game) : Parent(game),
-                                                                         mLoadoutInstructions(LineGap),
-                                                                         mPageHeaders(LineGap),
-                                                                         mGameTypeInstrs(5   )
+InstructionsUserInterface::InstructionsUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager),
+   mLoadoutInstructions(LineGap),
+   mPageHeaders(LineGap)
 {
    // Quick sanity check...
    TNLAssert(ARRAYSIZE(pageHeaders) == InstructionMaxPages, "pageHeaders not aligned with enum IntructionPages!!!");
@@ -87,19 +86,17 @@ InstructionsUserInterface::InstructionsUserInterface(ClientGame *game) : Parent(
       { "Mission",           "[[Mission]]" }
    };
 
-   pack(mSpecialKeysInstrLeft,  mSpecialKeysBindingsLeft, 
-        helpBindLeft, ARRAYSIZE(helpBindLeft), getGame()->getSettings());
+   pack(mSpecialKeysInstrLeft,  mSpecialKeysBindingsLeft, helpBindLeft, ARRAYSIZE(helpBindLeft));
 
 
    const ControlStringsEditor helpBindRight[] = 
    { 
-      { "Universal Chat",    "[[OutOfGameChat]]" },
+      { "Lobby Chat",        "[[OutOfGameChat]]" },
       { "Display FPS / Lag", "[[FPS]]"           },
       { "Diagnostics",       "[[Diagnostics]]"   }
    };
 
-   pack(mSpecialKeysInstrRight, mSpecialKeysBindingsRight, 
-        helpBindRight, ARRAYSIZE(helpBindRight), getGame()->getSettings());
+   pack(mSpecialKeysInstrRight, mSpecialKeysBindingsRight, helpBindRight, ARRAYSIZE(helpBindRight));
 }
 
 
@@ -221,11 +218,11 @@ void InstructionsUserInterface::initNormalKeys_page1()
    keysInstrRight.add(blank);
    keysBindingsRight.add(blank);
 
-   pack(keysInstrLeft,  keysBindingsLeft, helpBindLeft, helpBindLeftCount, getGame()->getSettings());
-   pack(keysInstrRight, keysBindingsRight, helpBindRight, helpBindRightCount, getGame()->getSettings());
+   pack(keysInstrLeft,  keysBindingsLeft, helpBindLeft, helpBindLeftCount);
+   pack(keysInstrRight, keysBindingsRight, helpBindRight, helpBindRightCount);
 
 
-   S32 centeringOffset = getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;  //(= 33)
+   S32 centeringOffset = RenderUtils::getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;  //(= 33)
 
    mSymbolSets.clear();
 
@@ -236,7 +233,7 @@ void InstructionsUserInterface::initNormalKeys_page1()
 }
 
 
-void InstructionsUserInterface::render()
+void InstructionsUserInterface::render() const
 {
    static const S32 FIRST_COMMAND_PAGE = InstructionsUserInterface::InstructionAdvancedCommands;
    static const S32 FIRST_OBJ_PAGE     = InstructionsUserInterface::InstructionWeaponProjectiles;
@@ -277,7 +274,7 @@ void InstructionsUserInterface::render()
          break;
       case InstructionAdvancedCommands:
          renderPageCommands(InstructionAdvancedCommands - FIRST_COMMAND_PAGE, 
-                            "Tip: Define QuickChat items to quickly enter commands (see INI for details)");
+                            "Tip: Define QuickChat items to quickly enter commands (see INI file for details)");
          break;
       case InstructionSoundCommands:
          renderPageCommands(InstructionSoundCommands - FIRST_COMMAND_PAGE);            // Sound control commands
@@ -303,10 +300,6 @@ void InstructionsUserInterface::render()
          break;
 
       case InstructionsGameTypes:
-         // JIT this, dude
-         if(mGameTypeInstrs.getItemCount() == 0)
-            initGameTypesPage();
-
          renderPageGameTypes();
          break;
 
@@ -339,18 +332,16 @@ void InstructionsUserInterface::activatePage(IntructionPages pageIndex)
 }
 
 
-bool InstructionsUserInterface::usingArrowKeys()
+bool InstructionsUserInterface::usingArrowKeys() const
 {
-   GameSettings *settings = getGame()->getSettings();
-
-   return getInputCode(settings, BINDING_LEFT)  == KEY_LEFT  &&
-          getInputCode(settings, BINDING_RIGHT) == KEY_RIGHT &&
-          getInputCode(settings, BINDING_UP)    == KEY_UP    &&
-          getInputCode(settings, BINDING_DOWN)  == KEY_DOWN;
+   return getInputCode(mGameSettings, BINDING_LEFT)  == KEY_LEFT  &&
+          getInputCode(mGameSettings, BINDING_RIGHT) == KEY_RIGHT &&
+          getInputCode(mGameSettings, BINDING_UP)    == KEY_UP    &&
+          getInputCode(mGameSettings, BINDING_DOWN)  == KEY_DOWN;
 }
 
 
-void InstructionsUserInterface::renderPage1()
+void InstructionsUserInterface::renderPage1() const
 {
    S32 starty = 65;
    S32 y;
@@ -360,14 +351,14 @@ void InstructionsUserInterface::renderPage1()
    y += mSymbolSets.render(y);
 
    y += 35;
-   glColor(secColor);
-   drawCenteredString_fixed(y, 20, "These special keys are also usually active:");
+   mGL->glColor(secColor);
+   RenderUtils::drawCenteredString_fixed(y, 20, "These special keys are also usually active:");
 
    y += 36;
    mSpecialKeysInstrLeft.render (col1, y, AlignmentLeft);
    mSpecialKeysInstrRight.render(col3, y, AlignmentLeft);
 
-   S32 centeringOffset = getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;
+   S32 centeringOffset = RenderUtils::getStringWidth(HelpContext, HeaderFontSize, "Control") / 2;
 
    mSpecialKeysBindingsLeft.render (col2 + centeringOffset, y, AlignmentCenter);
    mSpecialKeysBindingsRight.render(col4 + centeringOffset, y, AlignmentCenter);
@@ -430,13 +421,13 @@ void InstructionsUserInterface::initPage2()
    mLoadoutInstructions.clear();
 
    initPage2Block(loadoutInstructions1, ARRAYSIZE(loadoutInstructions1), HeaderFontSize, &Colors::yellow, &Colors::green,
-                  getGame()->getSettings()->getInputCodeManager(), mLoadoutInstructions);
+         mGameSettings->getInputCodeManager(), mLoadoutInstructions);
 
    // Add some space separating the two sections
    mLoadoutInstructions.add(SymbolString::getBlankSymbol(0, 30));
 
    initPage2Block(loadoutInstructions2, ARRAYSIZE(loadoutInstructions2), HeaderFontSize, &Colors::yellow, &Colors::cyan, 
-               getGame()->getSettings()->getInputCodeManager(), mLoadoutInstructions);
+         mGameSettings->getInputCodeManager(), mLoadoutInstructions);
 }
 
 
@@ -444,7 +435,7 @@ void InstructionsUserInterface::initPageHeaders()
 {
    mPageHeaders.clear();
 
-   InputCodeManager *inputCodeManager = getGame()->getSettings()->getInputCodeManager();
+   InputCodeManager *inputCodeManager = mGameSettings->getInputCodeManager();
 
    mPageHeaders.add(SymbolString("Use [[Tab]] to expand a partially typed command", 
                     inputCodeManager, HelpContext, FontSize, true, AlignmentLeft));
@@ -453,7 +444,7 @@ void InstructionsUserInterface::initPageHeaders()
 }
 
 
-void InstructionsUserInterface::renderPage2()
+void InstructionsUserInterface::renderPage2() const
 {
    mLoadoutInstructions.render(DisplayManager::getScreenInfo()->getGameCanvasWidth() / 2, 65, AlignmentCenter);    // Overall block is centered
 }
@@ -464,21 +455,21 @@ static const char *indicatorPageHeadings[] = {
 };
 
 
-static void renderBadgeLine(S32 y, S32 textSize, MeritBadges badge, S32 radius, const char *name, const char *descr)
+void InstructionsUserInterface::renderBadgeLine(S32 y, S32 textSize, MeritBadges badge, S32 radius, const char *name, const char *descr) const
 {
    S32 x = 50;
 
-   renderBadge((F32)x, (F32)y + radius, (F32)radius, badge);
+   GameObjectRender::renderBadge((F32)x, (F32)y + radius, (F32)radius, badge);
    x += radius + 10;
 
-   glColor(Colors::yellow);
-   x += drawStringAndGetWidth(x, y, textSize, name);
+   mGL->glColor(Colors::yellow);
+   x += RenderUtils::drawStringAndGetWidth(x, y, textSize, name);
 
    //glColor(Colors::cyan);
-   //x += drawStringAndGetWidth(x, y, textSize, " - ");
+   //x += RenderUtils::drawStringAndGetWidth(x, y, textSize, " - ");
 
-   glColor(Colors::white);
-   drawString(280, y, textSize, descr);
+   mGL->glColor(Colors::white);
+   RenderUtils::drawString(280, y, textSize, descr);
 }
 
 
@@ -489,11 +480,11 @@ struct BadgeDescr {
 };
 
 
-static S32 renderBadges(S32 y, S32 textSize, S32 descSize)
+S32 InstructionsUserInterface::renderBadges(S32 y, S32 textSize, S32 descSize) const
 {
    // Heading
-   glColor(Colors::cyan);
-   drawCenteredString(y, descSize, indicatorPageHeadings[0]);
+   mGL->glColor(Colors::cyan);
+   RenderUtils::drawCenteredString(y, descSize, indicatorPageHeadings[0]);
    y += 26;
 
    static const char *badgeHeadingDescription[] = {
@@ -502,8 +493,8 @@ static S32 renderBadges(S32 y, S32 textSize, S32 descSize)
    };
 
    // Description
-   glColor(Colors::green);
-   drawCenteredString(y, textSize, badgeHeadingDescription[0]);
+   mGL->glColor(Colors::green);
+   RenderUtils::drawCenteredString(y, textSize, badgeHeadingDescription[0]);
    y += 40;
 
    S32 radius = descSize / 2;
@@ -529,7 +520,7 @@ static S32 renderBadges(S32 y, S32 textSize, S32 descSize)
 }
 
 
-void InstructionsUserInterface::renderPageGameIndicators()
+void InstructionsUserInterface::renderPageGameIndicators() const
 {
    S32 y = 40;
    S32 descSize = 20;
@@ -557,27 +548,27 @@ static const char *moduleDescriptions[][2] = {
    { "Engineer: ", "Collect resources to build special objects (A)" }
 };
 
-void InstructionsUserInterface::renderModulesPage()
+void InstructionsUserInterface::renderModulesPage() const
 {
    S32 y = 40;
    S32 textsize = 20;
    S32 textGap = 6;
 
-   glColor(Colors::white);
+   mGL->glColor(Colors::white);
 
    for(U32 i = 0; i < ARRAYSIZE(moduleInstructions); i++)
    {
       if(i == 2)
-         glColor(Colors::green);
+         mGL->glColor(Colors::green);
 
-      drawCenteredString(y, textsize, moduleInstructions[i]);
+      RenderUtils::drawCenteredString(y, textsize, moduleInstructions[i]);
       y += textsize + textGap;
    }
 
    y += textsize;
 
-   glColor(Colors::cyan);
-   drawCenteredString(y, textsize, "THE MODULES");
+   mGL->glColor(Colors::cyan);
+   RenderUtils::drawCenteredString(y, textsize, "THE MODULES");
 
    y += 35;
 
@@ -585,23 +576,23 @@ void InstructionsUserInterface::renderModulesPage()
    for(U32 i = 0; i < ARRAYSIZE(moduleDescriptions); i++)
    {
       S32 x = 105;
-      glColor(Colors::yellow);
-      x += drawStringAndGetWidth(x, y, textsize, moduleDescriptions[i][0]);
+      mGL->glColor(Colors::yellow);
+      x += RenderUtils::drawStringAndGetWidth(x, y, textsize, moduleDescriptions[i][0]);
 
       // If first element is blank, it is a continution of the previous description
       if(strcmp(moduleDescriptions[i][0], "") == 0)
       {
-         x += getStringWidth(textsize, moduleDescriptions[i - 1][0]);
+         x += RenderUtils::getStringWidth(textsize, moduleDescriptions[i - 1][0]);
          y -= 20;
       }
 
-      glColor(Colors::white);
-      drawString(x, y, textsize, moduleDescriptions[i][1]);
+      mGL->glColor(Colors::white);
+      RenderUtils::drawString(x, y, textsize, moduleDescriptions[i][1]);
 
-      glPushMatrix();
-      glTranslatef(60, F32(y + 10), 0);
-      glScale(0.7f);
-      glRotatef(-90, 0, 0, 1);
+      mGL->glPushMatrix();
+      mGL->glTranslate(60, y + 10.0f);
+      mGL->glScale(0.7f);
+      mGL->glRotate(-90);
 
       static F32 thrusts[4] =  { 1, 0, 0, 0 };
       static F32 thrustsBoost[4] =  { 1.3f, 0, 0, 0 };
@@ -609,7 +600,7 @@ void InstructionsUserInterface::renderModulesPage()
       switch(i)
       {
          case 0:     // Boost
-            renderShip(ShipShape::Normal, &Colors::blue, 1, thrustsBoost, 1, (F32)Ship::CollisionRadius, 0, false, false, false, false);
+            GameObjectRender::renderShip(ShipShape::Normal, Colors::blue, 1, thrustsBoost, 1, (F32)Ship::CollisionRadius, 0, false, false, false, false);
             {
                F32 vertices[] = {
                      -20, -17,
@@ -623,16 +614,16 @@ void InstructionsUserInterface::renderModulesPage()
                      1, 1, 0, 1,  // Colors::yellow
                      0, 0, 0, 1,  // Colors::black
                };
-               renderColorVertexArray(vertices, colors, ARRAYSIZE(vertices) / 2, GL_LINES);
+               mGL->renderColorVertexArray(vertices, colors, ARRAYSIZE(vertices) / 2, GLOPT::Lines);
             }
             break;
 
          case 1:     // Shield
-            renderShip(ShipShape::Normal, &Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, 0, true, false, false, false);
+            GameObjectRender::renderShip(ShipShape::Normal, Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, 0, true, false, false, false);
             break;
 
          case 2:     // Armor
-            renderShip(ShipShape::Normal, &Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, 0, false, false, false, true);
+            GameObjectRender::renderShip(ShipShape::Normal, Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, 0, false, false, false, true);
             break;
 
          case 3:     // Repair
@@ -640,12 +631,12 @@ void InstructionsUserInterface::renderModulesPage()
                F32 health = (Platform::getRealMilliseconds() & 0x7FF) * 0.0005f;
 
                F32 alpha = 1.0;
-               renderShip(ShipShape::Normal, &Colors::blue, alpha, thrusts, health, (F32)Ship::CollisionRadius, 0, false, false, true, false);
+               GameObjectRender::renderShip(ShipShape::Normal, Colors::blue, alpha, thrusts, health, (F32)Ship::CollisionRadius, 0, false, false, true, false);
             }
             break;
 
          case 4:     // Sensor
-            renderShip(ShipShape::Normal, &Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, Platform::getRealMilliseconds(), 
+            GameObjectRender::renderShip(ShipShape::Normal, Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, Platform::getRealMilliseconds(),
                        false, true, false, false);
             break;
 
@@ -660,18 +651,18 @@ void InstructionsUserInterface::renderModulesPage()
                   alpha = frac * 0.001f;
                else
                   alpha = 1 - (frac * 0.001f);
-               renderShip(ShipShape::Normal, &Colors::blue, alpha, thrusts, 1, (F32)Ship::CollisionRadius, 0, false, false, false, false);
+               GameObjectRender::renderShip(ShipShape::Normal, Colors::blue, alpha, thrusts, 1, (F32)Ship::CollisionRadius, 0, false, false, false, false);
             }
             break;
 
          case 7:     // Engineer
             {
-               renderShip(ShipShape::Normal, &Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, 0, false, false, false, false);
-               renderResourceItem(mResourceItemPoints);
+               GameObjectRender::renderShip(ShipShape::Normal, Colors::blue, 1, thrusts, 1, (F32)Ship::CollisionRadius, 0, false, false, false, false);
+               GameObjectRender::renderResourceItem(mResourceItemPoints);
             }
             break;
       }
-      glPopMatrix();
+      mGL->glPopMatrix();
       y += 45;
    }
 }
@@ -712,10 +703,10 @@ const char *gGameObjectInfo[] = {
    /* 28 */   "GoFast",        "Makes ship go fast"
 };
 
-static U32 GameObjectCount = ARRAYSIZE(gGameObjectInfo) / 2;   
+static U32 GameObjectCount = ARRAYSIZE(gGameObjectInfo) / 2;
 
 
-void InstructionsUserInterface::renderPageObjectDesc(U32 index)
+void InstructionsUserInterface::renderPageObjectDesc(U32 index) const
 {
    U32 objectsPerPage = 6;
    U32 startIndex = index * objectsPerPage;
@@ -737,90 +728,90 @@ void InstructionsUserInterface::renderPageObjectDesc(U32 index)
       objStart += Point(200, 90);
       Point start = objStart + Point(0, 55);
 
-      glColor(Colors::yellow);
-      renderCenteredString(start, FontSize, text);
+      mGL->glColor(Colors::yellow);
+      GameObjectRender::renderCenteredString(start, FontSize, text);
 
-      glColor(Colors::white);
+      mGL->glColor(Colors::white);
       for(S32 j = 0; j < desc.size(); j++)
-         renderCenteredString(start + Point(0, 25 + j * FontSize * 1.2), 17, desc[j].c_str());
+         GameObjectRender::renderCenteredString(start + Point(0, 25 + j * FontSize * 1.2), 17, desc[j].c_str());
 
-      glPushMatrix();
-      glTranslate(objStart);
-      glScale(0.7f);
+      mGL->glPushMatrix();
+      mGL->glTranslate(objStart);
+      mGL->glScale(0.7f);
 
       S32 x, y;
 
       switch(i)
       {
          case 0:
-            renderProjectile(Point(0,0), 0, Platform::getRealMilliseconds());
+            GameObjectRender::renderProjectile(Point(0,0), 0, Platform::getRealMilliseconds());
             break;
          case 1:
-            renderProjectile(Point(0,0), 1, Platform::getRealMilliseconds());
+            GameObjectRender::renderProjectile(Point(0,0), 1, Platform::getRealMilliseconds());
             break;
          case 2:
-            renderProjectile(Point(0,0), 2, Platform::getRealMilliseconds());
+            GameObjectRender::renderProjectile(Point(0,0), 2, Platform::getRealMilliseconds());
             break;
          case 3:
-            renderGrenade(Point(0,0), 1);
+            GameObjectRender::renderGrenade(Point(0,0), 1);
             break;
          case 4:
-            renderSeeker(Point(0,0), 0, 400, Platform::getRealMilliseconds());
+            GameObjectRender::renderSeeker(Point(0,0), 0, 400, Platform::getRealMilliseconds());
             break;
          case 5:     // Blank
             break;
          case 6:
-            renderMine(Point(0,0), true, true);
+            GameObjectRender::renderMine(Point(0,0), true, true);
             break;
          case 7:
-            renderMine(Point(0,0), true, false);
+            GameObjectRender::renderMine(Point(0,0), true, false);
             break;
          case 8:
-            renderSpyBug(Point(0,0), Colors::blue, true, true);
+            GameObjectRender::renderSpyBug(Point(0,0), Colors::blue, true, true);
             break;
          case 9:
-            renderSpyBug(Point(0,0), Colors::blue, false, true);
+            GameObjectRender::renderSpyBug(Point(0,0), Colors::blue, false, true);
             break;
          case 10:    // Blank
          case 11:
             break;
          case 12:
-            renderRepairItem(Point(0,0));
+            GameObjectRender::renderRepairItem(Point(0,0));
             break;
          case 13:
-            renderEnergyItem(Point(0,0));
+            GameObjectRender::renderEnergyItem(Point(0,0));
             break;
          case 14:
             x = -40;
-            renderTurret(Colors::blue, Point(x, 15), Point(0, -1), true, 1, 0, 0);
+            GameObjectRender::renderTurret(Colors::blue, Point(x, 15), Point(0, -1), true, 1, 0, 0);
             x = -x;
-            renderTurret(Colors::blue, Point(x, 15), Point(0, -1), true, 1, 0, 1);
+            GameObjectRender::renderTurret(Colors::blue, Point(x, 15), Point(0, -1), true, 1, 0, 1);
             break;
          case 15:
-            renderTurret(Colors::white, Point(0, 15), Point(0, -1), false, 0, 0);
+            GameObjectRender::renderTurret(Colors::white, Point(0, 15), Point(0, -1), false, 0, 0);
             break;
 
          case 16:
             y = -25;
-            renderForceFieldProjector(Point(-50, y), Point(1, 0), &Colors::red, true, 0);
-            renderForceField(Point(-35, y), Point(50, y), &Colors::red, true);
+            GameObjectRender::renderForceFieldProjector(Point(-50, y), Point(1, 0), Colors::red, true, 0);
+            GameObjectRender::renderForceField(Point(-35, y), Point(50, y), Colors::red, true);
 
             y = -y;
-            renderForceFieldProjector(Point(-50, y), Point(1, 0), &Colors::red, true, 1);
-            renderForceField(Point(-35, y), Point(50, y), &Colors::red, true);
+            GameObjectRender::renderForceFieldProjector(Point(-50, y), Point(1, 0), Colors::red, true, 1);
+            GameObjectRender::renderForceField(Point(-35, y), Point(50, y), Colors::red, true);
 
             break;
          case 17:
-            renderForceFieldProjector(Point(-7.5, 0), Point(1, 0), &Colors::white, false, 0);
+            GameObjectRender::renderForceFieldProjector(Point(-7.5, 0), Point(1, 0), Colors::white, false, 0);
             break;
          case 18:
             {
                Vector<Point> dummy;
-               renderTeleporter(Point(0,0), 0, true, Platform::getRealMilliseconds(), 1, 1, (F32)Teleporter::TELEPORTER_RADIUS, 1, &dummy);
+               GameObjectRender::renderTeleporter(Point(0,0), 0, true, Platform::getRealMilliseconds(), 1, 1, (F32)Teleporter::TELEPORTER_RADIUS, 1, &dummy);
             }
             break;
          case 19:
-            renderFlag(&Colors::red);
+            GameObjectRender::renderFlag(Colors::red);
             break;
          case 20:    // Loadout zone
             {              // braces needed: see C2360
@@ -833,7 +824,7 @@ void InstructionsUserInterface::renderPageObjectDesc(U32 index)
                Vector<Point> f;     // fill
                Triangulate::Process(o, f);
 
-               renderLoadoutZone(&Colors::blue, &o, &f, findCentroid(o), angleOfLongestSide(o));
+               GameObjectRender::renderLoadoutZone(Colors::blue, &o, &f, findCentroid(o, false), angleOfLongestSide(o));
             }
 
             break;
@@ -849,7 +840,7 @@ void InstructionsUserInterface::renderPageObjectDesc(U32 index)
                Vector<Point> f;     // fill
                Triangulate::Process(o, f);
 
-               renderNexus(&o, &f, findCentroid(o), angleOfLongestSide(o), 
+               GameObjectRender::renderNexus(&o, &f, findCentroid(o, false), angleOfLongestSide(o),
                                        Platform::getRealMilliseconds() % 5000 > 2500, 0);
             }
             break;
@@ -865,31 +856,32 @@ void InstructionsUserInterface::renderPageObjectDesc(U32 index)
                Vector<Point> f;     // fill
                Triangulate::Process(o, f);
 
-               renderGoalZone(Color(0.5f, 0.5f, 0.5f), &o, &f, findCentroid(o), angleOfLongestSide(o), 
-                  false, 0, 0, 0, false);
+               GameObjectRender::renderGoalZone(Color(0.5f, 0.5f, 0.5f), &o, &f, findCentroid(o, false), angleOfLongestSide(o),
+                  false, 0, 0, 0, GoalZoneFlashNone);
             }
             break;
 
          case 23:    // Asteroid... using goofball factor to keep out of sync with Nexus graphic
-            renderAsteroid(Point(0,-10), 
+            GameObjectRender::renderAsteroid(Point(0,-10),
                      (S32)(Platform::getRealMilliseconds() / 2891) % Asteroid::getDesignCount(), .7f);    
             break;
 
          case 24:    // TestItem
-            renderTestItem(mTestItemPoints);
+            GameObjectRender::renderTestItem(mTestItemPoints);
             break;
 
          case 25:    // ResourceItem
-            renderResourceItem(mResourceItemPoints);
+            GameObjectRender::renderResourceItem(mResourceItemPoints);
             break;
 
          case 26:    // SoccerBall
-            renderSoccerBall(Point(0,0));
+            GameObjectRender::renderSoccerBall(Point(0,0));
             break;
 
          case 27:    // Core
             {
                F32 health[] = { 1,1,1,1,1,1,1,1,1,1 };
+               TNLAssert(ARRAYSIZE(health) == CORE_PANELS, "Wrong size for health array");
                
                Point pos(0,0);
                U32 time = Platform::getRealMilliseconds();
@@ -897,11 +889,11 @@ void InstructionsUserInterface::renderPageObjectDesc(U32 index)
                PanelGeom panelGeom;
                CoreItem::fillPanelGeom(pos, time, panelGeom);
 
-               glPushMatrix();
-                  glTranslate(pos);
-                  glScale(.55f);
-                  renderCore(pos, &Colors::blue, time, &panelGeom, health, 1.0f);
-               glPopMatrix();
+               mGL->glPushMatrix();
+                  mGL->glTranslate(pos);
+                  mGL->glScale(0.55f);
+                  GameObjectRender::renderCore(pos, Colors::blue, time, &panelGeom, health, 1.0f);
+               mGL->glPopMatrix();
             }
             break;
 
@@ -910,12 +902,12 @@ void InstructionsUserInterface::renderPageObjectDesc(U32 index)
                Vector<Point> speedZoneRenderPoints, outlinePoints;
                SpeedZone::generatePoints(Point(-SpeedZone::height / 2, 0), Point(1, 0), speedZoneRenderPoints, outlinePoints);
 
-               renderSpeedZone(speedZoneRenderPoints, Platform::getRealMilliseconds());
+               GameObjectRender::renderSpeedZone(speedZoneRenderPoints);
             }
             break;
 
       }
-      glPopMatrix();
+      mGL->glPopMatrix();
       objStart.y += 75;
       start.y += 75;
    }
@@ -924,27 +916,28 @@ void InstructionsUserInterface::renderPageObjectDesc(U32 index)
 
 extern CommandInfo chatCmds[];
 
-void InstructionsUserInterface::renderPageCommands(U32 page, const char *msg)
+void InstructionsUserInterface::renderPageCommands(U32 page, const char *msg) const
 {
    TNLAssert(page < COMMAND_CATEGORIES, "Page too high!");
 
    S32 ypos = 65;
 
-   S32 cmdCol = horizMargin;                                                         // Action column
-   S32 descrCol = horizMargin + S32(DisplayManager::getScreenInfo()->getGameCanvasWidth() * 0.25) + 55;   // Control column
+   const S32 cmdCol = horizMargin;                                                                             // Action column
+   const S32 descrCol = horizMargin + S32(DisplayManager::getScreenInfo()->getGameCanvasWidth() * 0.25) + 55;  // Control column
 
-   ypos += mPageHeaders.render(cmdCol, ypos, AlignmentLeft) - FontSize;    // Account for different positioning of SymbolStrings and drawString()
+   ypos += mPageHeaders.render(cmdCol, ypos, AlignmentLeft) - FontSize;    // Account for different positioning of SymbolStrings and RenderUtils::drawString()
 
    if(strcmp(msg, ""))
    {
-      glColor(Colors::palePurple);
-      drawString(cmdCol, ypos, FontSize, msg);
+      mGL->glColor(Colors::palePurple);
+      RenderUtils::drawString(cmdCol, ypos, FontSize, msg);
       ypos += 28;
    }
 
-   Color cmdColor =   Colors::cyan;
-   Color descrColor = Colors::white;
-   Color secColor =   Colors::yellow;
+   Color cmdColor        = Colors::cyan;
+   Color descrColor      = Colors::white;
+   Color secColor        = Colors::yellow;
+   Color headerHelpColor = Colors::red;
 
    Color argColor;
    argColor.interp(.5, Colors::cyan, Colors::black);
@@ -953,9 +946,9 @@ void InstructionsUserInterface::renderPageCommands(U32 page, const char *msg)
    const S32 cmdSize = 16;
    const S32 cmdGap = 8;
 
-   glColor(secColor);
-   drawString(cmdCol,   ypos, headerSize, "Command");
-   drawString(descrCol, ypos, headerSize, "Description");
+   mGL->glColor(secColor);
+   RenderUtils::drawString(cmdCol,   ypos, headerSize, "Command");
+   RenderUtils::drawString(descrCol, ypos, headerSize, "Description");
 
    ypos += cmdSize + cmdGap;
 
@@ -963,7 +956,7 @@ void InstructionsUserInterface::renderPageCommands(U32 page, const char *msg)
          (F32)cmdCol, (F32)ypos,
          (F32)750,    (F32)ypos
    };
-   renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GL_LINES);
+   mGL->renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GLOPT::Lines);
 
    ypos += 5;     // Small gap before cmds start
 
@@ -984,38 +977,49 @@ void InstructionsUserInterface::renderPageCommands(U32 page, const char *msg)
       // Check if we've just changed sections... if so, draw a horizontal line ----------
       if(chatCmds[i].helpGroup > section)      
       {
-         glColor(Colors::gray40);
+         mGL->glColor(Colors::gray40);
 
-         drawHorizLine(cmdCol, cmdCol + 335, ypos + (cmdSize + cmdGap) / 3);
+         RenderUtils::drawHorizLine(cmdCol, cmdCol + 335, ypos + (cmdSize + cmdGap) / 3);
 
          section = chatCmds[i].helpGroup;
 
          ypos += cmdSize + cmdGap;
       }
 
-      glColor(cmdColor);
-      
-      // Assemble command & args from data in the chatCmds struct
-      string cmdString = "/" + chatCmds[i].cmdName;
-      string args = "";
+      mGL->glColor(cmdColor);
 
-      for(S32 j = 0; j < chatCmds[i].cmdArgCount; j++)
-         args += " " + chatCmds[i].helpArgString[j];
-
-      S32 w = drawStringAndGetWidth(cmdCol, ypos, cmdSize, cmdString.c_str());
-      glColor(argColor);
-      drawString(cmdCol + w, ypos, cmdSize, args.c_str());
-
-      if(chatCmds[i].lines == 1)    // Everything on one line, the normal case
+      // Lines like this give us some header text for a section
+      //    {"", NULL, { }, 0, BOT_COMMANDS, 0, 1, { }, "Header text"},
+      if(chatCmds[i].cmdName.empty())
       {
-         glColor(descrColor);
-         drawString(descrCol, ypos, cmdSize, chatCmds[i].helpTextString.c_str());
+         mGL->glColor(headerHelpColor);
+         RenderUtils::drawString(cmdCol, ypos, cmdSize, chatCmds[i].helpTextString.c_str());
       }
-      else                          // Draw the command on one line, explanation on the next, with a bit of indent
+      else
       {
-         ypos += cmdSize + cmdGap;
-         glColor(descrColor);
-         drawString(cmdCol + 50, ypos, cmdSize, chatCmds[i].helpTextString.c_str());
+
+         // Assemble command & args from data in the chatCmds struct
+         string cmdString = "/" + chatCmds[i].cmdName;
+         string args = "";
+
+         for(S32 j = 0; j < chatCmds[i].cmdArgCount; j++)
+            args += " " + chatCmds[i].helpArgString[j];
+
+         S32 w = RenderUtils::drawStringAndGetWidth(cmdCol, ypos, cmdSize, cmdString.c_str());
+         mGL->glColor(argColor);
+         RenderUtils::drawString(cmdCol + w, ypos, cmdSize, args.c_str());
+
+         if(chatCmds[i].lines == 1)    // Everything on one line, the normal case
+         {
+            mGL->glColor(descrColor);
+            RenderUtils::drawString(descrCol, ypos, cmdSize, chatCmds[i].helpTextString.c_str());
+         }
+         else                          // Draw the command on one line, explanation on the next, with a bit of indent
+         {
+            ypos += cmdSize + cmdGap;
+            mGL->glColor(descrColor);
+            RenderUtils::drawString(cmdCol + 50, ypos, cmdSize, chatCmds[i].helpTextString.c_str());
+         }
       }
 
       ypos += cmdSize + cmdGap;
@@ -1023,8 +1027,10 @@ void InstructionsUserInterface::renderPageCommands(U32 page, const char *msg)
 }
 
 
-void InstructionsUserInterface::initGameTypesPage()
+UI::SymbolStringSet InstructionsUserInterface::getGameTypesPage() const
 {
+   UI::SymbolStringSet gameTypeInstrs(5);
+
    S32 tabStop = 160;
    bool foundTeamGame = false;
    
@@ -1032,13 +1038,13 @@ void InstructionsUserInterface::initGameTypesPage()
 
    string header = "Bitfighter has " + itos(S32(ARRAYSIZE(typeDescriptions))) + " primary game types.";
    symbols.push_back(SymbolString::getSymbolText(header, HeaderFontSize, HelpContext, &Colors::green));
-   mGameTypeInstrs.add(SymbolString(symbols));
+   gameTypeInstrs.add(SymbolString(symbols));
 
    header = "The following games are usually played without teams:";
    symbols.clear();
    symbols.push_back(SymbolString::getSymbolText(header, HeaderFontSize, HelpContext, &Colors::yellow));
    symbols.push_back(SymbolString::getBlankSymbol(0, 10));
-   mGameTypeInstrs.add(SymbolString(symbols));
+   gameTypeInstrs.add(SymbolString(symbols));
 
    for(U32 i = 0; i < ARRAYSIZE(typeDescriptions); i++)
    {
@@ -1048,7 +1054,7 @@ void InstructionsUserInterface::initGameTypesPage()
          header = "The following games are team based:";
          symbols.push_back(SymbolString::getSymbolText(header, HeaderFontSize, HelpContext, &Colors::yellow));
          symbols.push_back(SymbolString::getBlankSymbol(0, 10));
-         mGameTypeInstrs.add(SymbolString(symbols));
+         gameTypeInstrs.add(SymbolString(symbols));
          foundTeamGame = true;
       }
 
@@ -1066,20 +1072,24 @@ void InstructionsUserInterface::initGameTypesPage()
             symbols.push_back(SymbolShapePtr(new SymbolBlank(tabStop)));
 
          symbols.push_back(SymbolString::getSymbolText(lines[j], FontSize, HelpContext, &Colors::white));
-         mGameTypeInstrs.add(SymbolString(symbols));
+         gameTypeInstrs.add(SymbolString(symbols));
       }
 
       symbols.clear();
       symbols.push_back(SymbolString::getBlankSymbol(0, 2));
-      mGameTypeInstrs.add(SymbolString(symbols));
-
+      gameTypeInstrs.add(SymbolString(symbols));
    }
+
+   return gameTypeInstrs;
 }
 
 
-void InstructionsUserInterface::renderPageGameTypes()
+void InstructionsUserInterface::renderPageGameTypes() const
 {
-   mGameTypeInstrs.render(horizMargin, 60, AlignmentLeft);
+   // JIT this, dude
+   static UI::SymbolStringSet gameTypeInstrs = getGameTypesPage();
+    
+   gameTypeInstrs.render(horizMargin, 60, AlignmentLeft);
 }
 
 

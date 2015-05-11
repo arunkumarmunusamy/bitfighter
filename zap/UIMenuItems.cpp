@@ -5,7 +5,7 @@
 
 #include "UIMenuItems.h"
 #include "UIMenus.h"
-#include "UIEditorMenus.h"
+#include "UIQuickMenu.h"
 
 #include "DisplayManager.h"    // For DisplayManager::getScreenInfo() stuff
 #include "FontManager.h"
@@ -17,7 +17,6 @@
 
 #include "stringUtils.h"
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 
 
 namespace Zap
@@ -169,17 +168,17 @@ const Color *MenuItem::getColor(bool isSelected)
 
 void MenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSelected)
 {
-   glColor(*getColor(isSelected));
+   mGL->glColor(*getColor(isSelected));
 
    FontManager::pushFontContext(MenuContext);
-      drawCenteredStringf(xpos, ypos, textsize, "%s%s", getPrompt().c_str(), mDisplayValAppendage);
+      RenderUtils::drawCenteredStringf(xpos, ypos, textsize, "%s%s", getPrompt().c_str(), mDisplayValAppendage);
    FontManager::popFontContext();
 }
 
 
 S32 MenuItem::getWidth(S32 textsize)
 {
-   return getStringWidthf(textsize, "%s%s", getPrompt().c_str(), mDisplayValAppendage);
+   return RenderUtils::getStringWidthf(textsize, "%s%s", getPrompt().c_str(), mDisplayValAppendage);
 }
 
 
@@ -393,14 +392,14 @@ string ToggleMenuItem::getOptionText()
 
 void ToggleMenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSelected)
 {
-   drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(isSelected), *getValueColor(isSelected),
+   RenderUtils::drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(isSelected), *getValueColor(isSelected),
                           getPrompt().c_str(), getOptionText().c_str());
 }
 
 
 S32 ToggleMenuItem::getWidth(S32 textsize)
 {
-   return getStringPairWidth(textsize, MenuContext, InputContext, getPrompt().c_str(), getOptionText().c_str());
+   return RenderUtils::getStringPairWidth(textsize, MenuContext, InputContext, getPrompt().c_str(), getOptionText().c_str());
 }
 
 
@@ -771,14 +770,14 @@ string CounterMenuItem::getOptionText()
 
 void CounterMenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSelected)
 {
-   drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(isSelected), *getValueColor(isSelected),
+   RenderUtils::drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(isSelected), *getValueColor(isSelected),
                           getPrompt().c_str(), getOptionText().c_str());
 }
 
 
 S32 CounterMenuItem::getWidth(S32 textsize)
 {
-   return getStringPairWidth(textsize, MenuContext, InputContext, getPrompt().c_str(), getOptionText().c_str());
+   return RenderUtils::getStringPairWidth(textsize, MenuContext, InputContext, getPrompt().c_str(), getOptionText().c_str());
 }
 
 
@@ -1158,14 +1157,14 @@ string PlayerMenuItem::getOptionText()
 
 void PlayerMenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSelected)
 {
-   glColor(*getColor(isSelected));
-   drawCenteredString(xpos, ypos, textsize, getOptionText().c_str());
+   mGL->glColor(*getColor(isSelected));
+   RenderUtils::drawCenteredString(xpos, ypos, textsize, getOptionText().c_str());
 }
 
 
 S32 PlayerMenuItem::getWidth(S32 textsize)
 {
-   return getStringWidth(textsize, getOptionText().c_str());
+   return RenderUtils::getStringWidth(textsize, getOptionText().c_str());
 }
 
 
@@ -1185,13 +1184,14 @@ void PlayerMenuItem::activatedWithShortcutKey()
 ////////////////////////////////////
 
 TeamMenuItem::TeamMenuItem(S32 index, AbstractTeam *team, void (*callback)(ClientGame *, U32), InputCode inputCode, bool isCurrent) :
-               MenuItem(index, team->getName().getString(), callback, "", inputCode, KEY_UNKNOWN)
+   MenuItem(index, team->getName().getString(), callback, "", inputCode, KEY_UNKNOWN)
 {
+   mSelectedColor   = team->getColor();
+   mUnselectedColor = team->getColor();
    mTeam = team;
    mIsCurrent = isCurrent;
-   mUnselectedColor = *team->getColor();
-   mSelectedColor = *team->getColor();
 }
+
 
 // Destructor
 TeamMenuItem::~TeamMenuItem()
@@ -1215,14 +1215,14 @@ string TeamMenuItem::getOptionText()
 
 void TeamMenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSelected)
 {
-   glColor(*getColor(isSelected));
-   drawCenteredStringf(xpos, ypos, textsize, getOptionText().c_str());
+   mGL->glColor(*getColor(isSelected));
+   RenderUtils::drawCenteredStringf(xpos, ypos, textsize, getOptionText().c_str());
 }
 
 
 S32 TeamMenuItem::getWidth(S32 textsize)
 {
-   return getStringWidth(textsize, getOptionText().c_str());
+   return RenderUtils::getStringWidth(textsize, getOptionText().c_str());
 }
 
 
@@ -1282,10 +1282,10 @@ void TextEntryMenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSelected
    else
       textColor.set(Colors::cyan);
 
-   S32 xpos2 = drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(isSelected), textColor,
+   S32 xpos2 = RenderUtils::drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(isSelected), textColor,
                                       getPrompt().c_str(), getOptionText().c_str());
 
-   glColor(Colors::red);      // Cursor is always red
+   mGL->glColor(Colors::red);      // Cursor is always red
    if(isSelected)
    {
       FontManager::pushFontContext(InputContext);
@@ -1297,7 +1297,7 @@ void TextEntryMenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSelected
 
 S32 TextEntryMenuItem::getWidth(S32 textsize)
 {
-   return getStringPairWidth(textsize, MenuContext, InputContext, getPrompt().c_str(), getOptionText().c_str());
+   return RenderUtils::getStringPairWidth(textsize, MenuContext, InputContext, getPrompt().c_str(), getOptionText().c_str());
 }
 
 
@@ -1305,7 +1305,7 @@ bool TextEntryMenuItem::handleKey(InputCode inputCode)
 { 
    bool handled = mLineEditor.handleKey(inputCode);
    if(mTextEditedCallback)
-      mTextEditedCallback(mLineEditor.getString(), mMenu->getAssociatedObject());
+      mTextEditedCallback(this, mLineEditor.getString(), mMenu->getAssociatedObject());
 
    return handled;
 }
@@ -1324,9 +1324,12 @@ void TextEntryMenuItem::handleTextInput(char ascii)
       mLineEditor.addChar(ascii);
 
       if(mTextEditedCallback)
-         mTextEditedCallback(mLineEditor.getString(), mMenu->getAssociatedObject());
+         mTextEditedCallback(this, mLineEditor.getString(), mMenu->getAssociatedObject());
    }
 }
+
+void TextEntryMenuItem::setHelp(const string &help)   { TNLAssert(false, "Not implemented for this class!"); }
+void TextEntryMenuItem::setHasError(bool hasError)    { TNLAssert(false, "Not implemented for this class!"); }
 
 
 MenuItemTypes TextEntryMenuItem::getItemType()
@@ -1377,7 +1380,7 @@ void TextEntryMenuItem::activatedWithShortcutKey()
 }
 
 
-void TextEntryMenuItem::setTextEditedCallback(void(*callback)(string, BfObject *))
+void TextEntryMenuItem::setTextEditedCallback(void(*callback)(TextEntryMenuItem *, const string &, BfObject *))
 {
    mTextEditedCallback = callback;
 }
@@ -1478,7 +1481,7 @@ SimpleTextEntryMenuItem::~SimpleTextEntryMenuItem()
 }
 
 
-void SimpleTextEntryMenuItem::setHelp(string help)
+void SimpleTextEntryMenuItem::setHelp(const string &help)
 {
    mHelp = help;
 }
@@ -1505,7 +1508,7 @@ bool SimpleTextEntryMenuItem::handleKey(InputCode inputCode)
 
    // Call this menu item's callback if the lineEditor handled the key (it is also run in hasTextInput() )
    if(mTextEditedCallback && handled)
-      mTextEditedCallback(mLineEditor.getString(), mMenu->getAssociatedObject());
+      mTextEditedCallback(this, mLineEditor.getString(), mMenu->getAssociatedObject());
 
    return handled;
 }
@@ -1515,10 +1518,10 @@ void SimpleTextEntryMenuItem::render(S32 xpos, S32 ypos, S32 textsize, bool isSe
 {
    Color textColor(Colors::cyan);
 
-   S32 xpos2 = drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(false), textColor,
+   S32 xpos2 = RenderUtils::drawCenteredStringPair(xpos, ypos, textsize, MenuContext, InputContext, *getColor(false), textColor,
          getPrompt().c_str(), mLineEditor.getDisplayString().c_str());
 
-   glColor(Colors::red);      // Cursor is always red
+   mGL->glColor(Colors::red);      // Cursor is always red
 
    FontManager::pushFontContext(InputContext);
    mLineEditor.drawCursor(xpos2, ypos, textsize);

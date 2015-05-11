@@ -4,15 +4,17 @@
 //------------------------------------------------------------------------------
 
 #include "BfObject.h"
-#include "gameObjectRender.h"    // For drawHollowSquare
+
 #include "gameConnection.h"
 #include "game.h"
 #include "ClientInfo.h"
+#include "Level.h"
 #include "moveObject.h"
 #include "TeamConstants.h"
 
 #ifndef ZAP_DEDICATED
 #  include "ClientGame.h"
+#  include "RenderUtils.h"    // For drawHollowSquare
 #endif
 
 #include "ServerGame.h"
@@ -33,14 +35,16 @@ using namespace LuaArgs;
 bool isEngineeredType(U8 x)
 {
    return
-         x == TurretTypeNumber || x == ForceFieldProjectorTypeNumber;
+         x == TurretTypeNumber || x == ForceFieldProjectorTypeNumber || x == MortarTypeNumber;
 }
+
 
 bool isShipType(U8 x)
 {
    return
          x == PlayerShipTypeNumber || x == RobotShipTypeNumber;
 }
+
 
 bool isProjectileType(U8 x)
 {
@@ -49,11 +53,13 @@ bool isProjectileType(U8 x)
          x == BurstTypeNumber || x == SeekerTypeNumber;
 }
 
+
 bool isGrenadeType(U8 x)
 {
    return
          x == MineTypeNumber || x == SpyBugTypeNumber || x == BurstTypeNumber;
 }
+
 
 // Ship::findRepairTargets uses this and expects everything to be a sub-class of Item (except for teleporter)
 // This is used to determine if bursts should explode on impact or not.
@@ -62,8 +68,10 @@ bool isWithHealthType(U8 x)
    return
          x == PlayerShipTypeNumber || x == RobotShipTypeNumber           ||
          x == TurretTypeNumber     || x == ForceFieldProjectorTypeNumber ||
-         x == CoreTypeNumber       || x == TeleporterTypeNumber;
+         x == CoreTypeNumber       || x == TeleporterTypeNumber          ||
+         x == MortarTypeNumber;
 }
+
 
 bool isForceFieldDeactivatingType(U8 x)
 {
@@ -76,6 +84,7 @@ bool isForceFieldDeactivatingType(U8 x)
          x == AsteroidTypeNumber;
 }
 
+
 bool isRadiusDamageAffectableType(U8 x)
 {
    return
@@ -84,7 +93,7 @@ bool isRadiusDamageAffectableType(U8 x)
          x == ResourceItemTypeNumber || x == TestItemTypeNumber            || x == AsteroidTypeNumber   ||
          x == TurretTypeNumber       || x == ForceFieldProjectorTypeNumber || x == CoreTypeNumber       ||
          x == FlagTypeNumber         || x == SoccerBallItemTypeNumber      || x == TeleporterTypeNumber ||
-         x == SeekerTypeNumber;
+         x == SeekerTypeNumber       || x == MortarTypeNumber;
 }
 
 
@@ -110,7 +119,8 @@ bool isCollideableType(U8 x)
    return
          x == BarrierTypeNumber || x == PolyWallTypeNumber   ||
          x == TurretTypeNumber  || x == ForceFieldTypeNumber ||
-         x == CoreTypeNumber    || x == ForceFieldProjectorTypeNumber;
+         x == CoreTypeNumber    || x == ForceFieldProjectorTypeNumber ||
+         x == MortarTypeNumber;
 }
 
 
@@ -159,7 +169,7 @@ bool isWeaponCollideableType(U8 x)
          x == AsteroidTypeNumber   || x == TestItemTypeNumber       || x == ResourceItemTypeNumber        ||
          x == TurretTypeNumber     || x == CoreTypeNumber           || x == BarrierTypeNumber             ||
          x == PolyWallTypeNumber   || x == ForceFieldTypeNumber     || x == TeleporterTypeNumber          ||
-         x == SeekerTypeNumber;
+         x == SeekerTypeNumber     || x == MortarTypeNumber;
 }
 
 bool isAsteroidCollideableType(U8 x)
@@ -169,7 +179,8 @@ bool isAsteroidCollideableType(U8 x)
          x == TestItemTypeNumber   || x == ResourceItemTypeNumber        ||
          x == TurretTypeNumber     || x == ForceFieldProjectorTypeNumber ||
          x == BarrierTypeNumber    || x == PolyWallTypeNumber            ||
-         x == ForceFieldTypeNumber || x == CoreTypeNumber;
+         x == ForceFieldTypeNumber || x == CoreTypeNumber                ||
+         x == MortarTypeNumber;
 }
 
 bool isFlagCollideableType(U8 x)
@@ -195,7 +206,7 @@ bool isVisibleOnCmdrsMapType(U8 x)
          x == GoalZoneTypeNumber   || x == NexusTypeNumber          || x == LoadoutZoneTypeNumber         || 
          x == SpeedZoneTypeNumber  || x == TeleporterTypeNumber     || x == SlipZoneTypeNumber            ||
          x == AsteroidTypeNumber   || x == TestItemTypeNumber       || x == ResourceItemTypeNumber        ||
-         x == EnergyItemTypeNumber || x == RepairItemTypeNumber; 
+         x == EnergyItemTypeNumber || x == RepairItemTypeNumber     || x == MortarTypeNumber; 
 }
 
 bool isVisibleOnCmdrsMapWithSensorType(U8 x)     // Weapons visible on commander's map for sensor
@@ -209,7 +220,8 @@ bool isVisibleOnCmdrsMapWithSensorType(U8 x)     // Weapons visible on commander
          x == SpeedZoneTypeNumber  || x == TeleporterTypeNumber     || x == BurstTypeNumber               ||
          x == LineTypeNumber       || x == TextItemTypeNumber       || x == RepairItemTypeNumber          ||
          x == AsteroidTypeNumber   || x == TestItemTypeNumber       || x == EnergyItemTypeNumber          ||
-         x == BulletTypeNumber     || x == MineTypeNumber           || x == SeekerTypeNumber;
+         x == BulletTypeNumber     || x == MineTypeNumber           || x == SeekerTypeNumber              ||
+         x == MortarTypeNumber;
 }
 
 
@@ -259,6 +271,7 @@ DamageInfo::DamageInfo()
 // Constructor
 EditorObject::EditorObject()
 {
+   mInEditor = false;
    mLitUp = false; 
    mSelected = false; 
    mVertexLitUp = 0;
@@ -277,28 +290,28 @@ void EditorObject::onAttrsChanging() { /* Do nothing */ }
 void EditorObject::onAttrsChanged()  { /* Do nothing */ }
 
 
-const char *EditorObject::getEditorHelpString()
+const char *EditorObject::getEditorHelpString() const
 {
    TNLAssert(false, "getEditorHelpString method not implemented!");
    return "getEditorHelpString method not implemented!";  // better then a NULL crash in non-debug mode or continuing past the Assert
 }
 
 
-const char *EditorObject::getPrettyNamePlural()
+const char *EditorObject::getPrettyNamePlural() const
 {
    TNLAssert(false, "getPrettyNamePlural method not implemented!");
    return "getPrettyNamePlural method not implemented!";
 }
 
 
-const char *EditorObject::getOnDockName()
+const char *EditorObject::getOnDockName() const
 {
    TNLAssert(false, "getOnDockName method not implemented!");
    return "getOnDockName method not implemented!";
 }
 
 
-const char *EditorObject::getOnScreenName()
+const char *EditorObject::getOnScreenName() const
 {
    TNLAssert(false, "getOnScreenName method not implemented!");
    return "getOnScreenName method not implemented!";
@@ -306,7 +319,7 @@ const char *EditorObject::getOnScreenName()
 
 
 // Not all editor objects will implement this
-const char *EditorObject::getInstructionMsg(S32 attributeCount)
+const char *EditorObject::getInstructionMsg(S32 attributeCount) const
 {
    if(attributeCount > 0)
       return "[Enter] to edit attributes";
@@ -321,14 +334,14 @@ void EditorObject::fillAttributesVectors(Vector<string> &keys, Vector<string> &v
 }
 
 
-S32 EditorObject::getDockRadius()
+S32 EditorObject::getDockRadius() const
 {
    return 10;
 }
 
 
 
-bool EditorObject::isSelected()
+bool EditorObject::isSelected() const
 {
    return mSelected;
 }
@@ -347,7 +360,7 @@ void EditorObject::setSelected(bool selected)
 }
 
 
-bool EditorObject::isLitUp() 
+bool EditorObject::isLitUp() const 
 { 
    return mLitUp; 
 }
@@ -362,7 +375,7 @@ void EditorObject::setLitUp(bool litUp)
 }
 
 
-bool EditorObject::isVertexLitUp(S32 vertexIndex)
+bool EditorObject::isVertexLitUp(S32 vertexIndex) const
 {
    return mVertexLitUp == vertexIndex;
 }
@@ -374,10 +387,22 @@ void EditorObject::setVertexLitUp(S32 vertexIndex)
 }
 
 
+void EditorObject::onAddedToEditor()
+{
+   mInEditor = true;
+}
+
+
 // Size of object in editor 
-F32 EditorObject::getEditorRadius(F32 currentScale)
+F32 EditorObject::getEditorRadius(F32 currentScale) const
 {
    return 10 * currentScale;   // 10 pixels is base size
+}
+
+
+bool EditorObject::isInEditor() const
+{
+   return mInEditor;
 }
 
 
@@ -430,6 +455,15 @@ BfObject::~BfObject()
 }
 
 
+// BfObjects inherit from NetObjects, which delete themselves if their reference count hits 0.  Using this
+// mechanism is safer than an outright delete, which will fail if there are more than one pointers to
+// the "this" object.
+void BfObject::deleteThyself()
+{
+   decRef();
+}
+
+
 void BfObject::assignNewUserAssignedId()
 {
    setUserAssignedId(getNextDefaultId(), false);
@@ -447,7 +481,7 @@ void BfObject::assignNewSerialNumber()
 }
 
 
-S32 BfObject::getSerialNumber()
+S32 BfObject::getSerialNumber() const
 {
    return mSerialNumber;
 }
@@ -481,6 +515,13 @@ void BfObject::setTeam(lua_State *L, S32 stackPos)
 void BfObject::setPos(lua_State *L, S32 stackPos)
 {
    setPos(getPointOrXY(L, stackPos));
+}
+
+
+// Overridden in children
+bool BfObject::overlapsPoint(const Point &point) const
+{
+   return false;
 }
 
 
@@ -538,16 +579,18 @@ void BfObject::setGeom(lua_State *L, S32 stackIndex)
 
    // Adjust geometry
    GeomObject::setGeom(points);
-   onPointsChanged();
 
-   // Tell this BfObject its geometry has changed
+   // Tell this GeomObject/BfObject its geometry has changed
    onGeomChanged();
 }
 
 
-const Color *BfObject::getColor() const
+const Color &BfObject::getColor() const
 { 
-   return mGame->getObjTeamColor(this);
+   TNLAssert(getDatabase(), "Why do we need the color of an object not in a database?");
+   TNLAssert(dynamic_cast<Level *>(getDatabase()), "Looks like this database is not a Level!");
+
+   return static_cast<Level *>(getDatabase())->getTeamColor(getTeam());
 }
 
 
@@ -570,7 +613,7 @@ bool BfObject::canAddToEditor() { return true; }
 void BfObject::addToGame(Game *game, GridDatabase *database)
 {   
    TNLAssert(mGame == NULL, "Error: Object already in a game in BfObject::addToGame.");
-   TNLAssert(game != NULL,  "Error: thefGame is NULL in BfObject::addToGame.");
+   TNLAssert(game != NULL,  "Error: Adding to a NULL game in BfObject::addToGame.");
 
    mGame = game;
    if(database)
@@ -596,24 +639,17 @@ void BfObject::removeFromGame(bool deleteObject)
 }
 
 
-bool BfObject::processArguments(S32 argc, const char**argv, Game *game)
+bool BfObject::processArguments(S32 argc, const char **argv, Level *level)
 {
    logprintf(LogConsumer::LogError, "Missing processArguments for %s", getClassName());
    return false;
 }
 
 
-void BfObject::onPointsChanged()                        
-{   
-   GeomObject::onPointsChanged();
-   updateExtentInDatabase(); 
-   setMaskBits(GeomMask);
-}
-
-
+// Make sure the database extents are in sync with where the object actually is
 void BfObject::updateExtentInDatabase()
 {
-   setExtent(calcExtents());    // Make sure the database extents are in sync with where the object actually is
+   setExtent(calcExtents());
 }
 
 
@@ -626,10 +662,21 @@ void BfObject::unselect()
 }
 
 
+// Can be overriden by child objects, which should always call Parent::onGeomChanged()
 void BfObject::onGeomChanged()
 {
+   // Notify our GeomObject parent of the geometry change
    GeomObject::onGeomChanged();
+
    updateExtentInDatabase();
+   setMaskBits(GeomMask);
+}
+
+
+void BfObject::moveTo(const Point &pos, S32 snapVertex)
+{  
+   GeomObject::moveTo(pos, snapVertex);
+   onGeomChanged();
 }
 
 
@@ -639,12 +686,11 @@ void BfObject::onItemDragging()  { onGeomChanged(); }
 
 
 #ifndef ZAP_DEDICATED
-void BfObject::prepareForDock(ClientGame *game, const Point &point, S32 teamIndex)
+void BfObject::prepareForDock(const Point &point, S32 teamIndex)
 {
-   mGame = game;
-
    unselectVerts();
    setTeam(teamIndex);
+   setExtent(calcExtents());    // Make sure the object's extents are properly set
 }
 
 #endif
@@ -660,18 +706,19 @@ void BfObject::renderAndLabelHighlightedVertices(F32 currentScale)
    for(S32 i = 0; i < getVertCount(); i++)
       if(vertSelected(i) || isVertexLitUp(i) || ((isSelected() || isLitUp())  && getVertCount() == 1))
       {
-         const Color *color = (vertSelected(i) || (isSelected() && getGeomType() == geomPoint)) ? 
-                                &Colors::EDITOR_SELECT_COLOR : &Colors::EDITOR_HIGHLIGHT_COLOR;
+         const Color &color = (vertSelected(i) || (isSelected() && getGeomType() == geomPoint)) ? 
+                                Colors::EDITOR_SELECT_COLOR : 
+                                Colors::EDITOR_HIGHLIGHT_COLOR;
 
          Point center = getVert(i) + getEditorSelectionOffset(currentScale);
 
-         drawHollowSquare(center, radius / currentScale, color);
+         RenderUtils::drawHollowSquare(center, radius / currentScale, color);
       }
 }
 #endif
 
 
-Point BfObject::getDockLabelPos()
+Point BfObject::getDockLabelPos() const
 {
    static const Point labelOffset(0, 11);
 
@@ -679,10 +726,10 @@ Point BfObject::getDockLabelPos()
 }
 
 
-void BfObject::highlightDockItem()
+void BfObject::highlightDockItem() const
 {
 #ifndef ZAP_DEDICATED
-   drawHollowSquare(getPos(), (F32)getDockRadius(), &Colors::EDITOR_HIGHLIGHT_COLOR);
+   RenderUtils::drawHollowSquare(getPos(), (F32)getDockRadius(), Colors::EDITOR_HIGHLIGHT_COLOR);
 #endif
 }
 
@@ -770,21 +817,20 @@ Point BfObject::getInitialPlacementOffset(U32 gridSize) const
 }
 
 
-void BfObject::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices)
+void BfObject::renderEditor(F32 currentScale, bool snappingToWallCornersEnabled, bool renderVertices) const
 {
    TNLAssert(false, "renderEditor not implemented!");
 }
 
 
-void BfObject::renderDock()
+void BfObject::renderDock(const Color &color) const
 {
    TNLAssert(false, "renderDock not implemented!");
 }
 
 
 // For editing attributes -- all implementation will need to be provided by the children
-EditorAttributeMenuUI *BfObject::getAttributeMenu()                                      { return NULL; }
-void                   BfObject::startEditingAttrs(EditorAttributeMenuUI *attributeMenu) { /* Do nothing */ }
+bool                   BfObject::startEditingAttrs(EditorAttributeMenuUI *attributeMenu) { return false; }
 void                   BfObject::doneEditingAttrs(EditorAttributeMenuUI *attributeMenu)  { /* Do nothing */ }
 
 
@@ -850,6 +896,12 @@ S32 BfObject::getUserAssignedId()
 void BfObject::setScopeAlways()
 {
    getGame()->setScopeAlwaysObject(this);
+}
+
+
+bool BfObject::isVisibleToTeam(S32 teamIndex) const
+{
+   return true;      // By default, all teams can see all objects
 }
 
 
@@ -923,7 +975,7 @@ Vector<Point> BfObject::getRepairLocations(const Point &repairOrigin)
 // This method returns true if the specified object collides with the given ray designated by
 // rayStart and rayEnd
 bool BfObject::objectIntersectsSegment(BfObject *object, const Point &rayStart, const Point &rayEnd,
-      F32 &fillCollisionTime)
+                                       F32 &fillCollisionTime)
 {
    F32 collisionTime = 1.f;
 
@@ -1063,6 +1115,8 @@ BfObject *BfObject::findObjectLOS(U8 typeNumber, U32 stateIndex, const Point &ra
          gridDB->findObjectLOS(typeNumber, stateIndex, rayStart, rayEnd, collisionTime, collisionNormal)
          );
 
+   // TODO: Probably need to check level::wallEdgeDatabase as well
+
    return NULL;
 }
 
@@ -1077,13 +1131,15 @@ BfObject *BfObject::findObjectLOS(TestFunc objectTypeTest, U32 stateIndex, const
          gridDB->findObjectLOS(objectTypeTest, stateIndex, rayStart, rayEnd, collisionTime, collisionNormal)
          );
 
+   // TODO: Probably need to check level::wallEdgeDatabase as well
+
    return NULL;
 }
 
 
 void BfObject::onAddedToGame(Game *game)
 {
-   game->mObjectsLoaded++;
+   // Do nothing
 }
 
 
@@ -1105,7 +1161,7 @@ Point BfObject::getVel() const
 }
 
 
-U32 BfObject::getCreationTime()
+U32 BfObject::getCreationTime() const
 {
    return mCreationTime;
 }
@@ -1153,7 +1209,7 @@ void BfObject::setPrevMove(const Move &move)
 }
 
 
-void BfObject::render()
+void BfObject::render() const
 {
    // Do nothing
 }
@@ -1296,6 +1352,12 @@ void BfObject::onGhostAddBeforeUpdate(GhostConnection *theConnection)
 #endif
 }
 
+
+// Overrides method in tnlNetObject.
+// onGhostAdd is called on the client side of a connection after
+// the constructor and after the first call to unpackUpdate (the
+// initial call).  Returning true signifies no error - returning
+// false causes the connection to abort.
 bool BfObject::onGhostAdd(GhostConnection *theConnection)
 {
 #ifndef ZAP_DEDICATED
@@ -1307,7 +1369,7 @@ bool BfObject::onGhostAdd(GhostConnection *theConnection)
 #endif
 
    // for performance, add to GridDatabase after update, to avoid slowdown from adding to database with zero points or (0,0) then moving
-   addToGame(gc->getClientGame(), gc->getClientGame()->getGameObjDatabase());
+   addToGame(gc->getClientGame(), gc->getClientGame()->getLevel());
 #endif
    return true;
 }
@@ -1319,7 +1381,7 @@ const Vector<Point> *BfObject::getEditorHitPoly() const
 }
 
 
-static const U8 TeamBits = 4;
+static const U8 TeamBits = 4;       // 4 bits = 16, we have 9 + 2 teams... so it fits!
 static const U8 TeamOffset = 2;     // To account for Neutral and Hostile teams
 
 void BfObject::readThisTeam(BitStream *stream)
@@ -1332,7 +1394,6 @@ void BfObject::writeThisTeam(BitStream *stream)
 {
    stream->writeInt(mTeam + TeamOffset, TeamBits);
 }
-
 
 
 /////

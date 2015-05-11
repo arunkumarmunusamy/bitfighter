@@ -10,6 +10,7 @@
 #include "ChatCommands.h"
 #include "ClientGame.h"
 #include "Console.h"
+#include "GameManager.h"
 #include "LevelSource.h"      // For LevelInfo used in level name tab-completion
 #include "UIChat.h"           // For font sizes and such
 #include "UIInstructions.h"   // For code to activate help screen
@@ -20,13 +21,15 @@
 #include "Colors.h"
 
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 #include "stringUtils.h"
+
+#define HEADER_TEXT(category, group, text) \
+   {"", NULL, { }, 0, category, group, 0, { }, text}
 
 namespace Zap
 {
    CommandInfo chatCmds[] = {   
-   //  cmdName          cmdCallback                 cmdArgInfo cmdArgCount   helpCategory helpGroup lines,  helpArgString            helpTextString
+   //  cmdName          cmdCallback                 cmdArgInfo cmdArgCount helpCategory helpGroup lines,  helpArgString            helpTextString
 
    { "dlmap",    &ChatCommands::downloadMapHandler, { STR },       1,      ADV_COMMANDS,     0,     1,    {"<level>"},            "Download the level from the online level database" },
    { "rate",     &ChatCommands::rateMapHandler,     { STR },       1,      ADV_COMMANDS,     0,     1,    {"<up | neutral | down>"}, "Rate this level on the level database (up or down)" },
@@ -38,11 +41,11 @@ namespace Zap
    { "mute",     &ChatCommands::muteHandler,        { NAME },      1,      ADV_COMMANDS,     1,     1,    {"<name>"},             "Toggle hiding chat messages from <name>" },
    { "vmute",    &ChatCommands::voiceMuteHandler,   { NAME },      1,      ADV_COMMANDS,     1,     1,    {"<name>"},             "Toggle muting voice chat from <name>" },
                  
-   { "mvol",     &ChatCommands::mVolHandler,      { xINT },      1,      SOUND_COMMANDS,   2,     1,    {"<0-10>"},             "Set music volume"      },
-   { "svol",     &ChatCommands::sVolHandler,      { xINT },      1,      SOUND_COMMANDS,   2,     1,    {"<0-10>"},             "Set SFX volume"        },
-   { "vvol",     &ChatCommands::vVolHandler,      { xINT },      1,      SOUND_COMMANDS,   2,     1,    {"<0-10>"},             "Set voice chat volume" },
-   { "mnext",    &ChatCommands::mNextHandler,     {  },          0,      SOUND_COMMANDS,   2,     1,    {  },                   "Play next track in the music list" },
-   { "mprev",    &ChatCommands::mPrevHandler,     {  },          0,      SOUND_COMMANDS,   2,     1,    {  },                   "Play previous track in the music list" },
+   { "mvol",     &ChatCommands::mVolHandler,        { xINT },      1,      SOUND_COMMANDS,   2,     1,    {"<0-10>"},             "Set music volume"      },
+   { "svol",     &ChatCommands::sVolHandler,        { xINT },      1,      SOUND_COMMANDS,   2,     1,    {"<0-10>"},             "Set SFX volume"        },
+   { "vvol",     &ChatCommands::vVolHandler,        { xINT },      1,      SOUND_COMMANDS,   2,     1,    {"<0-10>"},             "Set voice chat volume" },
+   { "mnext",    &ChatCommands::mNextHandler,       {  },          0,      SOUND_COMMANDS,   2,     1,    {  },                   "Play next track in the music list" },
+   { "mprev",    &ChatCommands::mPrevHandler,       {  },          0,      SOUND_COMMANDS,   2,     1,    {  },                   "Play previous track in the music list" },
 
    { "add",         &ChatCommands::addTimeHandler,         { xINT },  1, LEVEL_COMMANDS,  0,  1,  {"<time in minutes>"},                      "Add time to the current game" },
    { "next",        &ChatCommands::nextLevelHandler,       {  },      0, LEVEL_COMMANDS,  0,  1,  {  },                                       "Start next level" },
@@ -57,10 +60,16 @@ namespace Zap
    { "setscore",    &ChatCommands::setWinningScoreHandler, { xINT },  1, LEVEL_COMMANDS,  0,  1,  {"<score>"},                                "Set score to win the level" },
    { "resetscore",  &ChatCommands::resetScoreHandler,      {  },      0, LEVEL_COMMANDS,  0,  1,  {  },                                       "Reset all scores to zero" },
 
+   HEADER_TEXT(BOT_COMMANDS, 0, "These commands add bot players that continue to play in future levels"),
+   { "morebots",    &ChatCommands::moreBotsHandler,        {  },                     0, BOT_COMMANDS,    0,  1,  {  },                                               "Add some bots (keep teams balanced)"},
+   { "lessbots",    &ChatCommands::lessBotsHandler,        {  },                     0, BOT_COMMANDS,    0,  1,  {  },                                               "Remove some bots (keep teams balanced)"},
+
+   HEADER_TEXT(BOT_COMMANDS, 1, "These commands add bots to the current game; they will not play in future levels"),
    { "addbot",      &ChatCommands::addBotHandler,          { STR, TEAM, STR },       3, BOT_COMMANDS,    1,  2,  {"[file]", "[team name or num]","[args]"},          "Add bot from [file] to [team num], pass [args] to bot" },
    { "addbots",     &ChatCommands::addBotsHandler,         { xINT, STR, TEAM, STR }, 4, BOT_COMMANDS,    1,  2,  {"[count]","[file]","[team name or num]","[args]"}, "Add [count] bots from [file] to [team num], pass [args] to bot" },
-   { "kickbot",     &ChatCommands::kickBotHandler,         {  },                     1, BOT_COMMANDS,    1,  1,  {  },                                               "Kick a bot" },
-   { "kickbots",    &ChatCommands::kickBotsHandler,        {  },                     1, BOT_COMMANDS,    1,  1,  {  },                                               "Remove all bots from game" },
+   { "kickbot",     &ChatCommands::kickBotHandler,         {  },                     0, BOT_COMMANDS,    1,  1,  {  },                                               "Kick a bot" },
+   { "kickbots",    &ChatCommands::kickBotsHandler,        {  },                     0, BOT_COMMANDS,    1,  1,  {  },                                               "Remove all bots from game" },
+
 
    { "announce",           &ChatCommands::announceHandler,           { STR },        1, ADMIN_COMMANDS,  0,  1,  {"<announcement>"},      "Announce an important message" },
    { "kick",               &ChatCommands::kickPlayerHandler,         { NAME },       1, ADMIN_COMMANDS,  0,  1,  {"<name>"},              "Kick a player from the game" },
@@ -77,13 +86,12 @@ namespace Zap
    { "rename",             &ChatCommands::renamePlayerHandler,       { NAME, STR },  2, ADMIN_COMMANDS,  0,  1,  {"<from>","<to>"},       "Give a player a new name" },
    { "maxbots",            &ChatCommands::setMaxBotsHandler,         { xINT },       1, ADMIN_COMMANDS,  0,  1,  {"<count>"},             "Set the maximum bots allowed for this server" },
    { "shuffle",            &ChatCommands::shuffleTeams,              { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "Randomly reshuffle teams" },
-#ifdef TNL_DEBUG
-   { "pause",              &ChatCommands::pauseHandler,              { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "TODO: add 'PAUSED' display while paused" },
-#endif
+   { "lockteams",          &ChatCommands::lockTeams,                 { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "Lock teams - teams same every game, players may not change" },
+   { "unlockteams",        &ChatCommands::unlockTeams,               { },            0, ADMIN_COMMANDS,  0,  1,  { "" },                  "Unlock teams - Teams revert to normal behavior" },
 
-   { "setownerpass",       &ChatCommands::setOwnerPassHandler,       { STR },        1, OWNER_COMMANDS,  0,  1,  {"[passwd]"},            "Set owner password" },
-   { "setadminpass",       &ChatCommands::setAdminPassHandler,       { STR },        1, OWNER_COMMANDS,  0,  1,  {"[passwd]"},            "Set admin password" },
-   { "shutdown",           &ChatCommands::shutdownServerHandler,     { xINT, STR },  2, OWNER_COMMANDS,  0,  1,  {"[time]","[message]"},  "Start orderly shutdown of server (def. = 10 secs)" },
+   { "setownerpass", &ChatCommands::setOwnerPassHandler,       { STR },        1, OWNER_COMMANDS,  0,  1,  {"[passwd]"},            "Set owner password" },
+   { "setadminpass", &ChatCommands::setAdminPassHandler,       { STR },        1, OWNER_COMMANDS,  0,  1,  {"[passwd]"},            "Set admin password" },
+   { "shutdown",     &ChatCommands::shutdownServerHandler,     { xINT, STR },  2, OWNER_COMMANDS,  0,  1,  {"[time]","[message]"},  "Start orderly shutdown of server (def. = 10 secs)" },
 
    { "showcoords", &ChatCommands::showCoordsHandler,    {  },        0, DEBUG_COMMANDS, 0,  1, {  },          "Show ship coordinates" },
    { "showzones",  &ChatCommands::showZonesHandler,     {  },        0, DEBUG_COMMANDS, 0,  1, {  },          "Show bot nav mesh zones" },
@@ -99,12 +107,16 @@ namespace Zap
 
    // The following are only available in debug builds!
 #ifdef TNL_DEBUG
-   { "showobjectoutlines", &ChatCommands::showObjectOutlinesHandler, {  },  0, DEVELOPER_COMMANDS, 1, 1, { },         "Show HelpItem object outlines on all objects" },    
+   {"pause",               &ChatCommands::pauseHandler,              {  },  0, DEVELOPER_COMMANDS, 0, 1, { }, "TODO: add 'PAUSED' display while paused"},
+   { "showobjectoutlines", &ChatCommands::showObjectOutlinesHandler, {  },  0, DEVELOPER_COMMANDS, 0, 1, { }, "Show HelpItem object outlines on all objects" },    
 #endif
 };
 
 
-const S32 ChatHelper::chatCmdSize = ARRAYSIZE(chatCmds); // So instructions will now how big chatCmds is
+#undef HEADER_TEXT
+
+
+const S32 ChatHelper::chatCmdSize = ARRAYSIZE(chatCmds); // So instructions will know how big chatCmds is
 static const S32 CHAT_COMPOSE_FONT_SIZE = 12;
 
 static void makeCommandCandidateList();      // Forward delcaration
@@ -118,6 +130,7 @@ ChatHelper::ChatHelper()
 
    setAnimationTime(65);    // Menu appearance time
 }
+
 
 // Destructor
 ChatHelper::~ChatHelper()
@@ -136,13 +149,14 @@ void ChatHelper::activate(ChatType chatType)
 }
 
 
-bool ChatHelper::isCmdChat()
+// Returns true if the chat message being composed looks like a command
+bool ChatHelper::isCmdChat() const
 {
    return mLineEditor.at(0) == '/' || mCurrentChatType == CmdChat;
 }
 
 
-void ChatHelper::render()
+void ChatHelper::render() const
 {
    FontManager::pushFontContext(InputContext);
    const char *promptStr;
@@ -177,8 +191,8 @@ void ChatHelper::render()
    S32 xPos = UserInterface::horizMargin;
 
    // Define some vars for readability:
-   S32 promptWidth = getStringWidth(CHAT_COMPOSE_FONT_SIZE, promptStr);
-   S32 nameSize   = getStringWidthf(CHAT_COMPOSE_FONT_SIZE, "%s: ", getGame()->getClientInfo()->getName().getString());
+   S32 promptWidth = RenderUtils::getStringWidth(CHAT_COMPOSE_FONT_SIZE, promptStr);
+   S32 nameSize   = RenderUtils::getStringWidthf(CHAT_COMPOSE_FONT_SIZE, "%s: ", getGame()->getClientInfo()->getName().getString());
    S32 nameWidth  = max(nameSize, promptWidth);
    // Above block repeated below...
 
@@ -199,34 +213,36 @@ void ChatHelper::render()
    // Only need to set scissors if we're scrolling.  When not scrolling, we control the display by only showing
    // the specified number of lines; there are normally no partial lines that need vertical clipping as 
    // there are when we're scrolling.  Note also that we only clip vertically, and can ignore the horizontal.
-   scissorsManager.enable(isAnimating, getGame()->getSettings()->getIniSettings()->mSettings.getVal<DisplayMode>("WindowMode"), 
+   scissorsManager.enable(isAnimating, getGame()->getSettings()->getSetting<DisplayMode>(IniKey::WindowMode), 
                           0.0f, F32(realYPos - 3), F32(DisplayManager::getScreenInfo()->getGameCanvasWidth()), F32(BOX_HEIGHT));
 
    // Render text entry box like thingy
    F32 top = (F32)ypos - 3;
 
-   F32 vertices[] = {
-         (F32)xPos,            top,
-         (F32)xPos + boxWidth, top,
-         (F32)xPos + boxWidth, top + BOX_HEIGHT,
-         (F32)xPos,            top + BOX_HEIGHT
-   };
+//   F32 vertices[] = {
+//         (F32)xPos,            top,
+//         (F32)xPos + boxWidth, top,
+//         (F32)xPos + boxWidth, top + BOX_HEIGHT,
+//         (F32)xPos,            top + BOX_HEIGHT
+//   };
+//
+//   for(S32 i = 1; i >= 0; i--)
+//   {
+//      glColor(baseColor, i ? .25f : .4f);
+//      renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, i ? GLOPT::TriangleFan : GLOPT::LineLoop);
+//   }
 
-   for(S32 i = 1; i >= 0; i--)
-   {
-      glColor(baseColor, i ? .25f : .4f);
-      renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, i ? GL_TRIANGLE_FAN : GL_LINE_LOOP);
-   }
+   RenderUtils::drawFilledRect(xPos, top, xPos + boxWidth, top + BOX_HEIGHT, baseColor, .25f, baseColor, .4f);
 
-   glColor(baseColor);
+   RenderUtils::glColor(baseColor);
 
    // Display prompt
    S32 xStartPos   = xPos + 3 + promptWidth;
 
-   drawString(xPos + 3, ypos, CHAT_COMPOSE_FONT_SIZE, promptStr);  // draw prompt
+   RenderUtils::drawString(xPos + 3, ypos, CHAT_COMPOSE_FONT_SIZE, promptStr);  // draw prompt
 
    // Display typed text
-   S32 displayWidth = drawStringAndGetWidth(xStartPos, ypos, CHAT_COMPOSE_FONT_SIZE, mLineEditor.getDisplayString().c_str());
+   S32 displayWidth = RenderUtils::drawStringAndGetWidth(xStartPos, ypos, CHAT_COMPOSE_FONT_SIZE, mLineEditor.getDisplayString().c_str());
 
    // If we've just finished entering a chat cmd, show next parameter
    if(isCmdChat())
@@ -248,8 +264,8 @@ void ChatHelper::render()
                S32 numberOfQuotes = count(line.begin(), line.end(), '"');
                if(chatCmds[i].cmdArgCount >= words.size() && line[line.size() - 1] == ' ' && numberOfQuotes % 2 == 0)
                {
-                  glColor(baseColor * .5);
-                  drawString(xStartPos + displayWidth, ypos, CHAT_COMPOSE_FONT_SIZE, chatCmds[i].helpArgString[words.size() - 1].c_str());
+                  RenderUtils::glColor(baseColor * .5);
+                  RenderUtils::drawString(xStartPos + displayWidth, ypos, CHAT_COMPOSE_FONT_SIZE, chatCmds[i].helpArgString[words.size() - 1].c_str());
                }
 
                break;
@@ -258,7 +274,7 @@ void ChatHelper::render()
       }
    }
 
-   glColor(baseColor);
+   RenderUtils::glColor(baseColor);
    mLineEditor.drawCursor(xStartPos, ypos, CHAT_COMPOSE_FONT_SIZE);
 
    // Restore scissors settings -- only used during scrolling
@@ -529,7 +545,7 @@ static void makeCommandCandidateList()
 void ChatHelper::onTextInput(char ascii)
 {
    // Pass the key on to the console for processing
-   if(gConsole.onKeyDown(ascii))
+   if(GameManager::gameConsole->onKeyDown(ascii))
       return;
 
    // Make sure we have a chat box open

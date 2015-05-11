@@ -28,18 +28,18 @@ protected:
    bool resetOnActivate;
    LineEditor lineEditor;
 
-   F32 getFontSize();
+   F32 getFontSize() const;
 
 
    virtual void onAccept(const char *text) = 0;
    virtual void onEscape() = 0;
 
 public:
-   explicit TextEntryUserInterface(ClientGame *game);  // Constructor
-   virtual ~TextEntryUserInterface();                  // Destructor
+   explicit TextEntryUserInterface(ClientGame *game, UIManager *uiManager);   // Constructor
+   virtual ~TextEntryUserInterface();                                         // Destructor
 
    virtual void onActivate();
-   virtual void render();
+   virtual void render() const;
 
    void setSecret(bool secret);
 
@@ -68,7 +68,7 @@ private:
    void completePartial();
 
 public:
-   explicit LevelNameEntryUserInterface(ClientGame *game);      // Constructor
+   explicit LevelNameEntryUserInterface(ClientGame *game, UIManager *uiManager);      // Constructor
    virtual ~LevelNameEntryUserInterface();
 
    virtual bool onKeyDown(InputCode inputCode);
@@ -77,7 +77,7 @@ public:
 
    virtual void onActivate();
 
-   void render();
+   void render() const;
 };
 
 
@@ -89,10 +89,10 @@ class PasswordEntryUserInterface :  public TextEntryUserInterface
    typedef TextEntryUserInterface Parent;
 
 public:
-   explicit PasswordEntryUserInterface(ClientGame *game);    // Constructor
+   explicit PasswordEntryUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~PasswordEntryUserInterface();
 
-   virtual void render();
+   virtual void render() const;
    virtual void onAccept(const char *text) = 0;
    virtual void onEscape() = 0;
 };
@@ -111,7 +111,7 @@ private:
    Address mConnectAddress;
 
 public:
-   explicit ServerAccessPasswordEntryUserInterface(ClientGame *game);    // Constructor
+   explicit ServerAccessPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~ServerAccessPasswordEntryUserInterface();
    void onAccept(const char *text);
    void onEscape();
@@ -127,7 +127,7 @@ class LevelChangeOrAdminPasswordEntryUserInterface :  public PasswordEntryUserIn
    typedef PasswordEntryUserInterface Parent;
 
 public:
-   explicit LevelChangeOrAdminPasswordEntryUserInterface(ClientGame *game);  // Constructor
+   explicit LevelChangeOrAdminPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager);  // Constructor
    virtual ~LevelChangeOrAdminPasswordEntryUserInterface();
 
    void onAccept(const char *text);
@@ -143,7 +143,7 @@ class ServerPasswordEntryUserInterface : public ServerAccessPasswordEntryUserInt
    typedef ServerAccessPasswordEntryUserInterface Parent;
 
 public:
-   explicit ServerPasswordEntryUserInterface(ClientGame *game);                // Constructor
+   explicit ServerPasswordEntryUserInterface(ClientGame *game, UIManager *uiManager);  // Constructor
    virtual ~ServerPasswordEntryUserInterface();
 };
 

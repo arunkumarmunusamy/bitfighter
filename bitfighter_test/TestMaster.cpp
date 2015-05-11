@@ -23,19 +23,21 @@ TEST(MasterTest, Sanity)
    MasterSettings masterSettings("");     // Don't read from an INI file
    MasterServer master(&masterSettings);
 
+   
+
    Address addr;
    GameSettingsPtr gameSettings = GameSettingsPtr(new GameSettings());
 
    ClientGame *clientGame = newClientGame(gameSettings);
 
-   clientGame->setConnectionToMaster(new Zap::MasterServerConnection(clientGame)); // uses Zap::MasterServerConnection
-   clientGame->getConnectionToMaster()->connectLocal((NetInterface*) clientGame->getNetInterface(), master.getNetInterface());
-   EXPECT_TRUE(clientGame->isConnectedToMaster());
-
-   Zap::MasterServerConnection *clientConnection = clientGame->getConnectionToMaster();
-   EXPECT_TRUE(clientConnection != NULL);
-   Master::MasterServerConnection *masterConnection = dynamic_cast<Master::MasterServerConnection *>(clientConnection->getRemoteConnectionObject());
-   EXPECT_TRUE(masterConnection != NULL);
+//   clientGame->setConnectionToMaster(new Zap::MasterServerConnection(clientGame)); // uses Zap::MasterServerConnection
+//   clientGame->getConnectionToMaster()->connectLocal((NetInterface*) clientGame->getNetInterface(), master.getNetInterface());
+//   EXPECT_TRUE(clientGame->isConnectedToMaster());
+//
+//   Zap::MasterServerConnection *clientConnection = clientGame->getConnectionToMaster();
+//   EXPECT_TRUE(clientConnection != NULL);
+//   Master::MasterServerConnection *masterConnection = dynamic_cast<Master::MasterServerConnection *>(clientConnection->getRemoteConnectionObject());
+//   EXPECT_TRUE(masterConnection != NULL);
 
    delete clientGame;
 }

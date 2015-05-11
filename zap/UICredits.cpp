@@ -7,12 +7,11 @@
 
 #include "UIManager.h"
 
-#include "gameObjectRender.h"    // For renderBitfighterLogo
+#include "GameObjectRender.h"    // For renderBitfighterLogo
 #include "DisplayManager.h"
 #include "Colors.h"
 
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 #include "SoundSystem.h"
 
 #include <stdio.h>
@@ -86,7 +85,8 @@ static const char *gameCredits[] = {
 static bool quitting = false;
 
 // Constructor
-CreditsUserInterface::CreditsUserInterface(ClientGame *game) : Parent(game)
+CreditsUserInterface::CreditsUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mScroller = new CreditsScroller();
 }
@@ -124,19 +124,19 @@ void CreditsUserInterface::idle(U32 timeDelta)
 
    if(mScroller->isActive())
       mScroller->updateFX(timeDelta);
-}
-
-
-void CreditsUserInterface::render()
-{
-   if(mScroller->isActive())
-      mScroller->render();
 
    if(quitting)
    {
       quitting = false;
       quit();
    }
+}
+
+
+void CreditsUserInterface::render() const
+{
+   if(mScroller->isActive())
+      mScroller->render();
 }
 
 
@@ -162,7 +162,7 @@ bool CreditsUserInterface::onKeyDown(InputCode inputCode)
 // Constructor
 CreditsScroller::CreditsScroller()
 {
-   glLineWidth(gDefaultLineWidth);
+   mGL->glLineWidth(RenderUtils::DEFAULT_LINE_WIDTH);
 
    // Loop through each line in the credits looking for section breaks ("-")
    // thus creating groups, the first of which is generally the job, followed
@@ -234,25 +234,25 @@ void CreditsScroller::updateFX(U32 delta)
 }
 
 
-void CreditsScroller::render()
+void CreditsScroller::render() const
 {
-   glColor(Colors::white);
+   mGL->glColor(Colors::white);
 
    // Draw the credits text, section by section, line by line
    for(S32 i = 0; i < mCredits.size(); i++)
       for(S32 j = 0; j < mCredits[i].lines.size(); j++)
-         drawCenteredString(S32(mCredits[i].pos) + CreditSpace * (j), 25, mCredits[i].lines[j]);
+         RenderUtils::drawCenteredString(S32(mCredits[i].pos) + CreditSpace * (j), 25, mCredits[i].lines[j]);
 
-   glColor(Colors::black);
+   mGL->glColor(Colors::black);
    F32 vertices[] = {
          0, 0,
          0, 150,
          (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth(), 150,
          (F32)DisplayManager::getScreenInfo()->getGameCanvasWidth(), 0
    };
-   renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GL_TRIANGLE_FAN);
+   mGL->renderVertexArray(vertices, ARRAYSIZE(vertices) / 2, GLOPT::TriangleFan);
 
-   renderStaticBitfighterLogo();    // And add our logo at the top of the page
+   GameObjectRender::renderStaticBitfighterLogo();    // And add our logo at the top of the page
 }
 
 
@@ -281,7 +281,8 @@ bool CreditsScroller::isActive() const
 ////////////////////////////////////////
 
 // Constructor
-SplashUserInterface::SplashUserInterface(ClientGame *game) : Parent(game)
+SplashUserInterface::SplashUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mPhase = SplashPhaseNone;
 }
@@ -319,36 +320,36 @@ void SplashUserInterface::idle(U32 timeDelta)
 }
 
 
-void SplashUserInterface::render()
+void SplashUserInterface::render() const
 {
    if(mPhase == SplashPhaseAnimation)             // Main animation phase
    {
-      glColor(0, mSplashTimer.getFraction(), 1);
+      mGL->glColor(0, mSplashTimer.getFraction(), 1);
 
       F32 fr = pow(mSplashTimer.getFraction(), 2);
 
       S32 ctr = DisplayManager::getScreenInfo()->getGameCanvasHeight() / 2;
 
-      renderBitfighterLogo(ctr, fr * 20.0f + 1, 1 << 0);
-      renderBitfighterLogo(ctr, fr * 50.0f + 1, 1 << 1);
-      renderBitfighterLogo(ctr, fr * 10.0f + 1, 1 << 2);
-      renderBitfighterLogo(ctr, fr *  2.0f + 1, 1 << 3);
-      renderBitfighterLogo(ctr, fr * 14.0f + 1, 1 << 4);
-      renderBitfighterLogo(ctr, fr *  6.0f + 1, 1 << 5);
-      renderBitfighterLogo(ctr, fr * 33.0f + 1, 1 << 6);
-      renderBitfighterLogo(ctr, fr *  9.0f + 1, 1 << 7);
-      renderBitfighterLogo(ctr, fr * 30.0f + 1, 1 << 8);
-      renderBitfighterLogo(ctr, fr * 15.0f + 1, 1 << 9);
+      GameObjectRender::renderBitfighterLogo(ctr, fr * 20.0f + 1, 1 << 0);
+      GameObjectRender::renderBitfighterLogo(ctr, fr * 50.0f + 1, 1 << 1);
+      GameObjectRender::renderBitfighterLogo(ctr, fr * 10.0f + 1, 1 << 2);
+      GameObjectRender::renderBitfighterLogo(ctr, fr *  2.0f + 1, 1 << 3);
+      GameObjectRender::renderBitfighterLogo(ctr, fr * 14.0f + 1, 1 << 4);
+      GameObjectRender::renderBitfighterLogo(ctr, fr *  6.0f + 1, 1 << 5);
+      GameObjectRender::renderBitfighterLogo(ctr, fr * 33.0f + 1, 1 << 6);
+      GameObjectRender::renderBitfighterLogo(ctr, fr *  9.0f + 1, 1 << 7);
+      GameObjectRender::renderBitfighterLogo(ctr, fr * 30.0f + 1, 1 << 8);
+      GameObjectRender::renderBitfighterLogo(ctr, fr * 15.0f + 1, 1 << 9);
    }
    else if(mPhase == SplashPhaseResting)          // Resting phase
    {
-      glColor(Colors::blue);
-      renderBitfighterLogo(DisplayManager::getScreenInfo()->getGameCanvasHeight() / 2, 1);
+      mGL->glColor(Colors::blue);
+      GameObjectRender::renderBitfighterLogo(DisplayManager::getScreenInfo()->getGameCanvasHeight() / 2, 1);
    }
    else if(mPhase == SplashPhaseRising)           // Rising phase
    {
-      glColor(0, sqrt(1 - mSplashTimer.getFraction()), 1 - pow(1 - mSplashTimer.getFraction(), 2));
-      renderBitfighterLogo((S32)(73.0f + ((F32) DisplayManager::getScreenInfo()->getGameCanvasHeight() / 2.0f - 73.0f) * mSplashTimer.getFraction()), 1);
+      mGL->glColor(0, sqrt(1 - mSplashTimer.getFraction()), 1 - pow(1 - mSplashTimer.getFraction(), 2));
+      GameObjectRender::renderBitfighterLogo((S32)(73.0f + ((F32) DisplayManager::getScreenInfo()->getGameCanvasHeight() / 2.0f - 73.0f) * mSplashTimer.getFraction()), 1);
    }
 }
 

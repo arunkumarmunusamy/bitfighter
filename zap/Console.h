@@ -26,7 +26,7 @@ class Console: public LuaScriptRunner
    typedef LuaScriptRunner Parent;
 
 private:
-   OGLCONSOLE_Console mConsole;
+   ::OGLCONSOLE_Console mConsole;
 
 protected:
    void killScript();
@@ -51,7 +51,7 @@ public:
    static void processConsoleCommandCallback(OGLCONSOLE_Console console, char *cmdline);
    void processCommand(const char *cmdline);
 
-   void render();
+   void render() const;
 
    bool isVisible();
    void show();
@@ -63,9 +63,6 @@ public:
    void output(const char *s, ...);    // Print message to console
 };
 
-
-// Provide transparent access to our global console instance
-extern Console gConsole;
 
 };
 

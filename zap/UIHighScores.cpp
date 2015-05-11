@@ -9,7 +9,7 @@
 #include "UIManager.h"
 
 #include "ClientGame.h"
-#include "gameObjectRender.h"
+#include "GameObjectRender.h"
 #include "masterConnection.h"   
 #include "DisplayManager.h"          // For canvas dimensions
 
@@ -17,7 +17,6 @@
 #include "Colors.h"
 
 #include "RenderUtils.h"
-#include "OpenglUtils.h"
 
 namespace Zap
 {
@@ -28,7 +27,8 @@ namespace Zap
 
 
 // Constructor
-HighScoresUserInterface::HighScoresUserInterface(ClientGame *game) : Parent(game)
+HighScoresUserInterface::HighScoresUserInterface(ClientGame *game, UIManager *uiManager) : 
+   Parent(game, uiManager)
 {
    mHaveHighScores = false;
 }
@@ -40,7 +40,7 @@ HighScoresUserInterface::~HighScoresUserInterface()
 }
 
 
-void HighScoresUserInterface::render()
+void HighScoresUserInterface::render() const
 {
    if(mHaveHighScores)
       renderScores();
@@ -49,7 +49,7 @@ void HighScoresUserInterface::render()
 }
 
 
-void HighScoresUserInterface::renderScores()
+void HighScoresUserInterface::renderScores() const
 {
    FontManager::pushFontContext(HelpContext);
 
@@ -62,9 +62,9 @@ void HighScoresUserInterface::renderScores()
    S32 gapBetweenGroups = 40;
    S32 scoreIndent = 10;
 
-   glColor(Colors::green);
+   mGL->glColor(Colors::green);
 
-   drawCenteredUnderlinedString(y, headerSize, "BITFIGHTER HIGH SCORES");
+   RenderUtils::drawCenteredUnderlinedString(y, headerSize, "BITFIGHTER HIGH SCORES");
    y += gapAfterTitle;
 
    S32 col = 0;   // 0 = left col, 1 = right col
@@ -76,14 +76,14 @@ void HighScoresUserInterface::renderScores()
 
       S32 x = col == 0 ? horizMargin : DisplayManager::getScreenInfo()->getGameCanvasWidth() / 2;
 
-      glColor(Colors::palePurple);
+      mGL->glColor(Colors::palePurple);
 
-      drawString(x, y, titleSize, mScoreGroups[i].title.c_str());
+      RenderUtils::drawString(x, y, titleSize, mScoreGroups[i].title.c_str());
       y += titleSize + 5;
 
       // Draw line
-      glColor(Colors::gray70);
-      drawHorizLine(x, x + DisplayManager::getScreenInfo()->getGameCanvasWidth() / 2 - 2 * horizMargin, y);
+      mGL->glColor(Colors::gray70);
+      RenderUtils::drawHorizLine(x, x + DisplayManager::getScreenInfo()->getGameCanvasWidth() / 2 - 2 * horizMargin, y);
       y += 5;
 
 
@@ -92,16 +92,16 @@ void HighScoresUserInterface::renderScores()
       // Now draw names
       for(S32 j = 0; j < mScoreGroups[i].names.size(); j++)
       {
-         glColor(Colors::cyan);
+         mGL->glColor(Colors::cyan);
 
          // First gap will always be largest if scores are descending...
          if(w == -1)
-            w = getStringWidth(textSize, mScoreGroups[i].scores[j].c_str());
+            w = RenderUtils::getStringWidth(textSize, mScoreGroups[i].scores[j].c_str());
 
-         drawStringr(x + scoreIndent + w, y, textSize, mScoreGroups[i].scores[j].c_str());
+         RenderUtils::drawStringr(x + scoreIndent + w, y, textSize, mScoreGroups[i].scores[j].c_str());
 
-         glColor(Colors::yellow);
-         drawStringAndGetWidth(x + scoreIndent + w + 15, y, textSize, mScoreGroups[i].names[j].c_str());
+         mGL->glColor(Colors::yellow);
+         RenderUtils::drawStringAndGetWidth(x + scoreIndent + w + 15, y, textSize, mScoreGroups[i].names[j].c_str());
 
          y += textSize + gapBetweenNames;
       }
@@ -113,15 +113,15 @@ void HighScoresUserInterface::renderScores()
          y = yStart;
    }
 
-   glColor(Colors::red80);
+   mGL->glColor(Colors::red80);
 
-   drawCenteredString(DisplayManager::getScreenInfo()->getGameCanvasHeight() - vertMargin - titleSize, titleSize, "The week ends Sunday/Monday at 0:00:00 UTC Time");
+   RenderUtils::drawCenteredString(DisplayManager::getScreenInfo()->getGameCanvasHeight() - vertMargin - titleSize, titleSize, "The week ends Sunday/Monday at 0:00:00 UTC Time");
 
    FontManager::popFontContext();
 }
 
 
-void HighScoresUserInterface::renderWaitingForScores()
+void HighScoresUserInterface::renderWaitingForScores() const
 {
    MasterServerConnection *masterConn = getGame()->getConnectionToMaster();
 
@@ -137,7 +137,7 @@ void HighScoresUserInterface::renderWaitingForScores()
       SymbolStringSet symbolSet(10);
 
       Vector<string> lines;
-      wrapString("Retrieving scores from Master Server", UIManager::MessageBoxWrapWidth, 18, ErrorMsgContext, lines);
+      RenderUtils::wrapString("Retrieving scores from Master Server", UIManager::MessageBoxWrapWidth, 18, ErrorMsgContext, lines);
 
       for(S32 i = 0; i < lines.size(); i++)
          symbolSet.add(SymbolString::getSymbolText(lines[i], 30, ErrorMsgContext, &Colors::blue));

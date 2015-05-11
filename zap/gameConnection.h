@@ -24,6 +24,8 @@
 
 #include <time.h>
 
+#include "gtest/gtest_prod.h"
+
 
 using namespace TNL;
 using namespace std;
@@ -264,6 +266,7 @@ public:
    TNL_DECLARE_RPC(c2sRequestCancelShutdown, ());
    TNL_DECLARE_RPC(s2cInitiateShutdown, (U16 time, StringTableEntry name, StringPtr reason, bool originator));
    TNL_DECLARE_RPC(s2cCancelShutdown, ());
+   TNL_DECLARE_RPC(s2cTeamsLocked, (bool locked));
 
    TNL_DECLARE_RPC(s2cSetIsBusy, (StringTableEntry name, bool isBusy));
 
@@ -307,6 +310,8 @@ public:
    void ReceivedRecordedGameplay(const U8 *filedata, U32 filedatasize);
    F32 getFileProgressMeter();
 
+   void sendPermissionsToClient(ClientInfo::ClientRole role, bool displayNoticeToPlayers);
+
 
    Vector<SafePtr<ByteBuffer> > mPendingTransferData; // Only used for progress meter
    U32 mReceiveTotalSize;
@@ -343,6 +348,11 @@ public:
 
 
    TNL_DECLARE_NETCONNECTION(GameConnection);
+
+   ///// Testing
+   friend class ObjectScopeTest;
+   FRIEND_TEST(ObjectScopeTest, TestItemPropagation);
+
 };
 
 };

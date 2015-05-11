@@ -23,6 +23,7 @@ set(SHARED_SOURCES
 	Color.cpp
 	config.cpp
 	Console.cpp
+	ConsoleLogConsumer.cpp
 	controlObjectConnection.cpp
 	CoreGame.cpp
 	CTFGame.cpp
@@ -33,7 +34,6 @@ set(SHARED_SOURCES
 	flagItem.cpp
 	game.cpp
 	gameConnection.cpp
-	gameLoader.cpp
 	gameNetInterface.cpp
 	GameRecorder.cpp
 	GameSettings.cpp
@@ -51,7 +51,9 @@ set(SHARED_SOURCES
 	IniFile.cpp
 	InputCode.cpp
 	item.cpp
+	Level.cpp
 	LevelDatabase.cpp
+	LevelLoadException.cpp
 	LevelSource.cpp
 	LineItem.cpp
 	LoadoutTracker.cpp
@@ -63,7 +65,7 @@ set(SHARED_SOURCES
 	LuaScriptRunner.cpp
 	masterConnection.cpp
 	MathUtils.cpp
-	md5wrapper.cpp
+	Md5Utils.cpp
 	move.cpp
 	moveObject.cpp
 	NexusGame.cpp
@@ -72,6 +74,7 @@ set(SHARED_SOURCES
 	Point.cpp
 	PointObject.cpp
 	polygon.cpp
+	PolyWall.cpp
 	projectile.cpp
 	rabbitGame.cpp
 	Rect.cpp
@@ -90,14 +93,18 @@ set(SHARED_SOURCES
 	SoundSystem.cpp
 	Spawn.cpp
 	speedZone.cpp
+	StackTracer.cpp
+	StackWalker.cpp
 	statistics.cpp
 	stringUtils.cpp
 	SystemFunctions.cpp
 	teamInfo.cpp
+	TeamHistoryManager.cpp
 	Teleporter.cpp
 	TextItem.cpp
 	Timer.cpp
-	WallSegmentManager.cpp
+	WallEdgeManager.cpp
+	WallItem.cpp
 	WeaponInfo.cpp
 	Zone.cpp
 	zoneControlGame.cpp
@@ -120,16 +127,17 @@ set(CLIENT_SOURCES
 	ConnectionStatsRenderer.cpp
 	ClientGame.cpp
 	Cursor.cpp
-	EditorAttributeMenuItemBuilder.cpp
 	EditorPlugin.cpp
 	EditorTeam.cpp
-	EnergyGaugeRenderer.cpp
+	EditorUndoManager.cpp
+	EditorWorkUnit.cpp
 	engineerHelper.cpp
 	Event.cpp
 	FontManager.cpp
 	FpsRenderer.cpp
-	gameObjectRender.cpp
+	GameObjectRender.cpp
 	GameRecorderPlayback.cpp
+	GaugeRenderer.cpp
 	HelpItemManager.cpp
 	HelperManager.cpp
 	helperMenu.cpp
@@ -142,9 +150,9 @@ set(CLIENT_SOURCES
 	LoadoutIndicator.cpp
 	loadoutHelper.cpp
 	oglconsole.cpp
-	OpenglUtils.cpp
 	quickChatHelper.cpp
 	RenderUtils.cpp
+	RenderManager.cpp
 	ScissorsManager.cpp
 	ScreenShooter.cpp
 	ShipShape.cpp
@@ -161,7 +169,7 @@ set(CLIENT_SOURCES
 	UIDiagnostics.cpp
 	UIEditor.cpp
 	UIEditorInstructions.cpp
-	UIEditorMenus.cpp
+	UIEditorMenu.cpp
 	UIErrorMessage.cpp
 	UIGame.cpp
 	UIGameParameters.cpp
@@ -175,6 +183,7 @@ set(CLIENT_SOURCES
 	UIMessage.cpp
 	UINameEntry.cpp
 	UIQueryServers.cpp
+	UIQuickMenu.cpp
 	UITeamDefMenu.cpp
 	VideoSystem.cpp
 	voiceCodec.cpp

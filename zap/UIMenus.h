@@ -30,7 +30,7 @@ class MenuUserInterface : public UserInterface
    typedef UserInterface Parent;
 
 private:
-   S32 checkMenuIndexBounds(S32 index);   // Returns corrected index
+   S32 checkMenuIndexBounds(S32 index) const;   // Returns corrected index
    Timer mScrollTimer;
 
    Timer mFadingNoticeTimer;
@@ -46,10 +46,13 @@ private:
 
    virtual void initialize();
 
+   void renderMenuInstructions(GameSettings *settings) const;
+   void renderArrow(S32 pos, bool pointingUp) const;
+
 protected:
    Vector<boost::shared_ptr<MenuItem> > mMenuItems;
 
-   S32 getOffset();                                   // Calculates index of topmost visible item
+   S32 findFirstVisibleItem() const;                  // Calculates index of top-most visible item
    S32 getBaseYStart() const;                         // Base calculation for getYStart()
    virtual S32 getYStart() const;                     // Get vert pos of first menu item
    virtual S32 getTextSize(MenuItemSize size) const;  // Let menus set their own text size
@@ -67,27 +70,27 @@ protected:
    virtual bool processKeys(InputCode inputCode);
    virtual S32 getSelectedMenuItem();
 
-   S32 getTotalMenuItemHeight();    // Add up height of all menu items
+   S32 getTotalMenuItemHeight() const; // Add up height of all menu items
 
    void sortMenuItems();
-   MenuItem *getLastMenuItem();
-   S32 getMaxFirstItemIndex();      // Calculates maximum index that the first item can have -- on non scrolling menus, this will be 0
+   MenuItem *getLastMenuItem() const;
+   S32 getMaxFirstItemIndex() const;   // Calculates maximum index that the first item can have -- on non scrolling menus, this will be 0
 
-   BfObject *mAssociatedObject;     // Some menus can have an associated object... this is it
+   BfObject *mAssociatedObject;        // Some menus can have an associated object... this is it
 
 public:
-   // Constructor
-   explicit MenuUserInterface(ClientGame *game);
-   MenuUserInterface(ClientGame *game, const string &title);
+   // Constructors
+   MenuUserInterface(ClientGame *game, UIManager *uiManager);
+   MenuUserInterface(ClientGame *game, UIManager *uiManager, const string &title);
    virtual ~MenuUserInterface();
 
-   bool isScrollingMenu();
+   bool isScrollingMenu() const;
 
    void clearMenuItems();
    S32 addMenuItem(MenuItem *menuItem);
    void addWrappedMenuItem(boost::shared_ptr<MenuItem> menuItem);
-   MenuItem *getMenuItem(S32 index);
-   S32 getMenuItemCount();
+   MenuItem *getMenuItem(S32 index) const;
+   S32 getMenuItemCount() const;
 
    bool itemSelectedWithMouse;
 
@@ -99,11 +102,11 @@ public:
    Color mMenuSubTitleColor;
    bool mMenuFooterContainsInstructions;
 
-   void idle(U32 timeDelta); 
+   virtual void idle(U32 timeDelta); 
 
    void getMenuResponses(Vector<string> &responses);     // Fill responses with values from menu
 
-   void render();                                        // Draw the basic menu
+   void render() const;                                        // Draw the basic menu
    bool onKeyDown(InputCode inputCode);
    void onKeyUp(InputCode inputCode);
    void onTextInput(char ascii);
@@ -134,12 +137,12 @@ private:
    bool mShowingAnimation;    // Is intro animation currently being played?
 
 public:
-   explicit MenuUserInterfaceWithIntroductoryAnimation(ClientGame *game);
+   explicit MenuUserInterfaceWithIntroductoryAnimation(ClientGame *game, UIManager *uiManager);
    virtual ~MenuUserInterfaceWithIntroductoryAnimation();
 
    void onActivate();
    void idle(U32 timeDelta);
-   void render();
+   void render() const;
    bool onKeyDown(InputCode inputCode);
    void processSelection(U32 index);
 };
@@ -154,8 +157,9 @@ class MainMenuUserInterface : public MenuUserInterfaceWithIntroductoryAnimation
    typedef MenuUserInterfaceWithIntroductoryAnimation Parent;
 
 private:
-   char mMOTD[MOTD_LEN];
-   U32 motdArriveTime;
+   string mMotd;
+   S32 mMotdPos;
+
    Timer mColorTimer;
    Timer mColorTimer2;
    
@@ -172,13 +176,13 @@ private:
    void renderExtras() const;
 
 public:
-   explicit MainMenuUserInterface(ClientGame *game);           // Constructor
+   explicit MainMenuUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~MainMenuUserInterface();
 
    void onEscape();
-   void render();
+   void render() const;
    void idle(U32 timeDelta); 
-   void setMOTD(const char *motd);              // Message of the day, from Master
+   void setMOTD(const string &motd);            // Message of the day, from Master
    void onActivate();
    void setNeedToUpgrade(bool needToUpgrade);   // Is client in need of an upgrade?
 
@@ -195,7 +199,7 @@ class OptionsMenuUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit OptionsMenuUserInterface(ClientGame *game);        // Constructor
+   explicit OptionsMenuUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~OptionsMenuUserInterface();
 
    void onEscape();
@@ -213,10 +217,10 @@ class InputOptionsMenuUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit InputOptionsMenuUserInterface(ClientGame *game);        // Constructor
+   explicit InputOptionsMenuUserInterface(ClientGame *game, UIManager *uiManager);  // Constructor
    virtual ~InputOptionsMenuUserInterface();
 
-   void render();
+   void render() const;
 
    void onEscape();
    void setupMenus();
@@ -232,7 +236,7 @@ class SoundOptionsMenuUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit SoundOptionsMenuUserInterface(ClientGame *game);        // Constructor
+   explicit SoundOptionsMenuUserInterface(ClientGame *game, UIManager *uiManager);  // Constructor
    virtual ~SoundOptionsMenuUserInterface();
 
    void onEscape();
@@ -249,7 +253,7 @@ class InGameHelpOptionsUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit InGameHelpOptionsUserInterface(ClientGame *game);        // Constructor
+   explicit InGameHelpOptionsUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~InGameHelpOptionsUserInterface();
 
    void onEscape();
@@ -266,7 +270,7 @@ class RobotOptionsMenuUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit RobotOptionsMenuUserInterface(ClientGame *game);        // Constructor
+   explicit RobotOptionsMenuUserInterface(ClientGame *game, UIManager *uiManager);     // Constructor
    virtual ~RobotOptionsMenuUserInterface();
 
    void onEscape();
@@ -284,7 +288,7 @@ class ServerPasswordsMenuUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit ServerPasswordsMenuUserInterface(ClientGame *game);        // Constructor
+   explicit ServerPasswordsMenuUserInterface(ClientGame *game, UIManager *uiManager);     // Constructor
    virtual ~ServerPasswordsMenuUserInterface();
 
    void onEscape();
@@ -319,15 +323,13 @@ private:
    S32 mEditingIndex;                        // Index of item we're editing, -1 if none
 
 public:
-   explicit HostMenuUserInterface(ClientGame *game);        // Constructor
+   explicit HostMenuUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~HostMenuUserInterface();
-
-   //void idle(U32 timeDelta);
 
    void onEscape();
    void setupMenus();
    void onActivate();
-   void render();
+   void render() const;
    void saveSettings();       // Save parameters in INI file
 };
 
@@ -345,7 +347,7 @@ private:
    NetConnection::TerminationReason mReason;
 
 public:
-   explicit NameEntryUserInterface(ClientGame *game);    // Constructor
+   explicit NameEntryUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~NameEntryUserInterface();
 
    void onEscape();
@@ -381,7 +383,7 @@ private:
    void buildMenu();
 
 public:
-   explicit GameMenuUserInterface(ClientGame *game);            // Constructor
+   explicit GameMenuUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~GameMenuUserInterface();
 
    void idle(U32 timeDelta);
@@ -400,7 +402,7 @@ private:
    typedef MenuUserInterface Parent;
 
 public:
-   explicit LevelMenuUserInterface(ClientGame *game);        // Constructor
+   explicit LevelMenuUserInterface(ClientGame *game, UIManager *uiManager);      // Constructor
    virtual ~LevelMenuUserInterface();
 
    void onActivate();
@@ -417,7 +419,7 @@ private:
    typedef MenuUserInterface Parent;
 
 public:
-   explicit RobotsMenuUserInterface(ClientGame *game);        // Constructor
+   explicit RobotsMenuUserInterface(ClientGame *game, UIManager *uiManager);     // Constructor
    virtual ~RobotsMenuUserInterface();
 
    void onActivate();
@@ -439,7 +441,7 @@ private:
    string mNameSoFar;
 
 public:
-   explicit LevelMenuSelectUserInterface(ClientGame *game);        // Constructor
+   explicit LevelMenuSelectUserInterface(ClientGame *game, UIManager *uiManager);   // Constructor
    virtual ~LevelMenuSelectUserInterface();
 
    void idle(U32 timeDelta);
@@ -484,10 +486,11 @@ class PlayerMenuUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit PlayerMenuUserInterface(ClientGame *game);        // Constructor
+   explicit PlayerMenuUserInterface(ClientGame *game, UIManager *uiManager);  // Constructor
    virtual ~PlayerMenuUserInterface();
 
-   void render();
+   void idle(U32 timeDelta);
+   void render() const;
    void playerSelected(U32 index);
    void onEscape();
 
@@ -502,10 +505,10 @@ class TeamMenuUserInterface : public MenuUserInterface
    typedef MenuUserInterface Parent;
 
 public:
-   explicit TeamMenuUserInterface(ClientGame *game);        // Constructor
+   explicit TeamMenuUserInterface(ClientGame *game, UIManager *uiManager);    // Constructor
    virtual ~TeamMenuUserInterface();
 
-   void render();
+   void idle(U32 timeDelta);
    void onEscape();
    string nameToChange;
 

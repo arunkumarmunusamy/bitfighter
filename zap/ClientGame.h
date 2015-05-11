@@ -80,6 +80,7 @@ public:
 
    void joinLocalGame(GameNetInterface *remoteInterface);
    void joinRemoteGame(Address remoteAddress, bool isFromMaster);
+   void activateMainMenuUI();
 
    ServerGame *getServerGame() const;
 
@@ -118,6 +119,9 @@ public:
    bool canRateLevel() const;
    void levelIsNotReallyInTheDatabase();
 
+   void moreBots();
+   void lessBots();
+
    void setLevelDatabaseId(U32 id);
 
    string getCurrentLevelFileName() const;
@@ -125,8 +129,6 @@ public:
    void showPreviousLevelName() const;
 
    static S32 getExpLevel(S32 gamesPlayed);
-
-
 
    UIManager *getUIManager() const;
 
@@ -169,7 +171,7 @@ public:
    void gotServerListFromMaster(const Vector<ServerAddr> &serverList);
 
    // Got some shizzle
-   void gotGlobalChatMessage(const char *playerNick, const char *message, bool isPrivate);
+   void gotLobbyChatMessage(const char *playerNick, const char *message, bool isPrivate);
    void gotChatMessage(const StringTableEntry &clientName, const StringPtr &message, bool global);
    void gotChatPM(const StringTableEntry &fromName, const StringTableEntry &toName, const StringPtr &message);
    void gotAnnouncement(const string &announcement);
@@ -179,35 +181,38 @@ public:
    void activatePlayerMenuUi();
    void renderBasicInterfaceOverlay() const;
 
-
    void onPlayerJoined(ClientInfo *clientInfo, bool isLocalClient, bool playAlert, bool showMessage);
    void onPlayerQuit(const StringTableEntry &name);
 
+   bool isGameOver() const;
+
    void setSpawnDelayed(bool spawnDelayed);
    bool isSpawnDelayed() const;
-   void undelaySpawn();
+   void undelaySpawn() const;
 
    // Chat related
    void sendChat(bool isGlobal, const StringPtr &message);
    void sendChatSTE(bool global, const StringTableEntry &message) const;
    void sendCommand(const StringTableEntry &cmd, const Vector<StringPtr> &args);
-   void setPlayersInGlobalChat(const Vector<StringTableEntry> &playerNicks);
-   void playerJoinedGlobalChat(const StringTableEntry &playerNick);
-   void playerLeftGlobalChat(const StringTableEntry &playerNick);
+   void setPlayersInLobbyChat(const Vector<StringTableEntry> &playerNicks);
+   void playerJoinedLobbyChat(const StringTableEntry &playerNick);
+   void playerLeftLobbyChat(const StringTableEntry &playerNick);
 
 
    // Team related
-   S32 getCurrentTeamIndex();
+   S32 getCurrentTeamIndex() const;
    void changePlayerTeam(const StringTableEntry &playerName, S32 teamIndex) const;
    void changeOwnTeam(S32 teamIndex) const;
    void switchTeams();     // User selected Switch Teams meunu item
+   void setTeamsLocked(bool locked);
 
 
    // Some FxManager passthroughs
    void emitBlast(const Point &pos, U32 size);
    void emitBurst(const Point &pos, const Point &scale, const Color &color1, const Color &color2);
    void emitDebrisChunk(const Vector<Point> &points, const Color &color, const Point &pos, const Point &vel, S32 ttl, F32 angle, F32 rotation);
-   void emitTextEffect(const string &text, const Color &color, const Point &pos) const;
+   void emitTextEffect(const string &text, const Color &color, const Point &pos, bool relative) const;
+   void emitDelayedTextEffect(U32 delay, const string &text, const Color &color, const Point &pos, bool relative) const;
    void emitSpark(const Point &pos, const Point &vel, const Color &color, S32 ttl, UI::SparkType sparkType);
    void emitExplosion(const Point &pos, F32 size, const Color *colorArray, U32 numColors);
    void emitTeleportInEffect(const Point &pos, U32 type);
@@ -236,7 +241,7 @@ public:
 
    // Check for permissions
    bool hasOwner(const char *failureMessage);
-   bool hasAdmin(const char *failureMessage);
+   bool hasAdmin(const char *failureMessage = "") const;
    bool hasLevelChange(const char *failureMessage);
 
    void gotEngineerResponseEvent(EngineerResponseEvent event);
@@ -251,10 +256,12 @@ public:
    bool isOnVoiceMuteList(const string &name);
 
    void connectionToServerRejected(const char *reason);
-   void setMOTD(const char *motd);
+   void setMOTD(const string &motd);
    void setNeedToUpgrade(bool needToUpgrade);
 
    void setHighScores(const Vector<StringTableEntry> &groupNames, const Vector<string> &names, const Vector<string> &scores) const;
+
+   void setPlayerScore(S32 index, S32 score);
 
    string getRemoteLevelDownloadFilename() const;
    void setRemoteLevelDownloadFilename(const string &filename);
@@ -301,14 +308,9 @@ public:
    void setGameSuspended_FromServerMessage(bool suspend);
 
    S32 getBotCount() const;
-   GridDatabase *getBotZoneDatabase() const;
+   const GridDatabase &getBotZoneDatabase() const;
 
-
-   // For loading levels in editor
-   bool processPseudoItem(S32 argc, const char **argv, const string &levelFileName, GridDatabase *database, S32 id);
-
-   void addPolyWall(BfObject *polyWall, GridDatabase *database);     // Add polyWall item to game
-   void addWallItem(BfObject *wallItem, GridDatabase *database);     // Add wallItem item to game
+   void addWallItem(WallItem *wallItem, GridDatabase *database);     // Add wallItem item to game
 
    Ship *getLocalPlayerShip() const;
 
